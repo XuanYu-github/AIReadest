@@ -1,15 +1,22 @@
 # OpenReadest
 
-OpenReadest 是基于 Readest 的非官方 Fork，重点保留本地阅读能力，并新增或强化 WebDAV 同步能力，用于私有云或自建 WebDAV 场景（坚果云、Nextcloud、群晖、WebDAV NAS 等）。上游项目仓库为 https://github.com/readest/readest 。
+OpenReadest 是基于 Readest 的非官方 Fork，重点保留本地阅读能力，并新增或强化 WebDAV 同步能力，用于私有云或自建 WebDAV 场景（坚果云、Nextcloud、群晖、WebDAV NAS 等）。上游项目 Readest： https://github.com/readest/readest 。
 
 本项目遵循 AGPL-3.0 许可证发布，并保留上游项目与第三方组件的版权和许可证声明。
 
-## 声明
+## ⚠️ 免责声明 & 项目说明
 
-- 非官方 Fork：本仓库不是 Readest 官方仓库，且当前仓库明确来源于上游项目 Readest。
-- 功能保留：保留核心阅读能力与 WebDAV 同步能力。
-- 许可证：沿用并遵循 AGPL-3.0，LICENSE 保持许可证正文，Fork 归属与额外版权说明见 NOTICE.md。
-- AI 开发说明：本项目主要基于 AI 辅助与生成流程完成，代码、文档与整理工作由 AI 生成或改写。
+**本项目 (OpenReadest) 是基于原项目 [Readest](https://github.com/readest/readest) 的一个独立 Fork（分支/衍生版本）。**
+
+为了避免混淆，特此说明：
+1. **独立性**：本项目与原项目 `readest/readest` 是两个相互独立的项目，拥有不同的更新计划和功能路线。
+2. **功能差异**：本项目在原项目基础上增加了（或计划增加）特定的新功能（例如：你提到的更新检查、赞助配置等），这些修改仅代表本项目的方向。
+3. **问题反馈**：如果你在使用 *本 Fork 版本* 时遇到问题或有功能建议，请直接在本仓库 (`luyishui/OpenReadest`) 提出，不要打扰原项目的开发者。
+4. **尊重原项目**：原项目的所有荣誉归原作者所有。本项目严格遵循原项目的开源协议 (AGPL-3.0) 进行分发。
+
+感谢原项目 [Readest](https://github.com/readest/readest) 提供的优秀基础！
+
+---
 
 ## 功能对比
 
@@ -68,3 +75,10 @@ OpenReadest 是基于 Readest 的非官方 Fork，重点保留本地阅读能力
 ## 发布说明
 
 公开仓库默认不提交打包产物、构建缓存与本地生成目录。最终发布前请通过独立构建流程生成 Windows 与 Android 安装包。
+
+## 💖 支持本项目
+
+如果你觉得本项目对你有帮助，欢迎考虑支持项目的持续维护和开发。你的支持将用于服务器成本、代码维护以及新功能的开发。
+
+### 捐赠方式
+
