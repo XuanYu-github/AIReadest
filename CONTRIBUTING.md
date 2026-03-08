@@ -83,7 +83,7 @@ Now you're all setup and can start implementing your changes.
 
 ### Implement your changes
 
-This project is a monorepo. The main application code is currently in the `apps/readest-app` directory. Here are some useful scripts for developing the frontend without compiling Tauri:
+This project is a monorepo. The main application code is currently in the `apps/openreadest-app` directory. Here are some useful scripts for developing the frontend without compiling Tauri:
 
 | Command          | Description                                        |
 | ---------------- | -------------------------------------------------- |

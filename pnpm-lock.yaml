@@ -44,7 +44,7 @@ importers:
         specifier: ^5
         version: 5.7.2
 
-  apps/readest-app:
+  apps/openreadest-app:
     dependencies:
       '@choochmeque/tauri-plugin-sharekit-api':
         specifier: ^0.3.0

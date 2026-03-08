@@ -66,6 +66,6 @@
 ## 测试
 只运行 WebDAV 相关测试：
 ```bash
-pnpm --filter @readest/readest-app exec vitest run src/__tests__/webdav/propfind-parse.test.ts src/__tests__/webdav/sync.integration.test.ts
+pnpm --filter @openreadest/app exec vitest run src/__tests__/webdav/propfind-parse.test.ts src/__tests__/webdav/sync.integration.test.ts
 ```
 

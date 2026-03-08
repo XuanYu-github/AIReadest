@@ -67,7 +67,7 @@ For local development and testing, build the Windows DLL (or the library) from t
 Build the DLL (for Windows explorer integration):
 
 ```powershell
-cd apps/readest-app/src-tauri
+cd apps/openreadest-app/src-tauri
 cargo build --release --manifest-path Cargo.toml --features com
 ```
 
