@@ -14,18 +14,21 @@ OpenReadest 是基于 Readest 的非官方 Fork，重点保留本地阅读能力
 ## 功能对比
 
 | 能力 | 原版 Readest | OpenReadest |
-|---|---:|---:|
+|:---|:---:|:---:|
 | EPUB/PDF/FB2/MOBI/CBZ 阅读 | ✅ | ✅ |
 | 批注/书签/进度 | ✅ | ✅ |
 | 多端支持（桌面/移动） | ✅ | ✅ |
 | WebDAV 同步 | 部分/无内置场景 | ✅ 强化 |
+| AI 朗读（无限） | ✅ | ❌ |
+| DeepL 翻译 | ✅ | ❌ |
 
+> **提示：** 如需体验完整功能（AI 朗读、DeepL 翻译等），建议使用原版 Readest：https://github.com/readest/readest
 
 ## 已移除能力
 
 - 账号登录
 - 原项目云空间
-- 付费订阅与支付
+- 付费订阅与功能
 - 遥测与错误上报
 - Discord Rich Presence
 - KOReader 插件中的原 Readest 云同步入口
