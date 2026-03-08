@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { RiDownloadCloud2Line, RiGithubLine } from 'react-icons/ri';
 import { useTranslation } from '@/hooks/useTranslation';
+import { eventDispatcher } from '@/utils/event';
+import { openExternalUrl } from '@/utils/open';
 import { getAppVersion } from '@/utils/version';
-import Link from './Link';
 import Dialog from './Dialog';
 
 const LOCAL_UPDATE_CONFIG_URL = '/updates/config.json';
@@ -23,10 +24,8 @@ const DEFAULT_UPDATE_CONFIG: Required<UpdateConfig> = {
   projectHomepage: 'https://github.com/luyishui/OpenReadest',
   releaseNotesUrl: 'https://github.com/luyishui/OpenReadest/releases',
   channelLabel: 'GitHub Pages / GitHub Releases',
-  summary:
-    'OpenReadest 的独立更新源正在接入中。当前阶段先保留独立“检查更新”页面，后续会接上远程版本信息、更新日志和下载分发。',
-  detail:
-    '现在你可以先通过项目主页查看最新进展；Android 包会继续按 ARM64 和 x86 分开提供测试包。',
+  summary: '这里会同步 OpenReadest 的版本动向，也给你留好项目主页和最新版本入口。',
+  detail: '如果一时打不开或加载不出来，多半是 GitHub 网络波动，换个时间或者稍后再试就好。',
 };
 
 const mergeUpdateConfig = (base: UpdateConfig, override?: UpdateConfig): Required<UpdateConfig> => ({
@@ -49,6 +48,16 @@ export const UpdateWindow = () => {
   const _ = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<Required<UpdateConfig>>(DEFAULT_UPDATE_CONFIG);
+
+  const openUpdateTarget = async (url: string) => {
+    const opened = await openExternalUrl(url);
+    if (!opened) {
+      eventDispatcher.dispatch('toast', {
+        message: _('链接打开失败，请稍后再试。'),
+        type: 'warning',
+      });
+    }
+  };
 
   const loadUpdateConfig = async () => {
     try {
@@ -108,7 +117,7 @@ export const UpdateWindow = () => {
     >
       {isOpen && (
         <div className='flex flex-col gap-5 py-2'>
-          <div className='rounded-[28px] bg-[linear-gradient(155deg,rgba(242,246,255,0.98),rgba(255,255,255,0.92))] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/5'>
+          <div className='bg-base-200 rounded-[28px] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/5'>
             <div className='space-y-2'>
               <p className='text-[11px] font-semibold uppercase tracking-[0.28em] text-neutral-content/50'>
                 {_(config.eyebrow)}
@@ -123,26 +132,25 @@ export const UpdateWindow = () => {
             <p className='mt-2 text-sm leading-7 text-base-content/75'>
               {_(config.detail)}
             </p>
-            <p className='mt-2 text-xs leading-6 text-base-content/60'>
-              {_('推荐分发通道：{{channel}}', { channel: config.channelLabel })}
-            </p>
           </div>
 
-          <div className='grid gap-3 sm:grid-cols-2'>
-            <Link
-              href={config.projectHomepage}
-              className='btn h-12 rounded-2xl border-none bg-black text-white hover:bg-black/90'
+          <div className='bg-base-200 grid gap-3 rounded-[28px] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.08)] ring-1 ring-black/5 sm:grid-cols-2'>
+            <button
+              type='button'
+              className='btn h-12 rounded-2xl border-none bg-base-content text-base-100 shadow-none hover:bg-base-content/90 active:bg-base-content focus-visible:outline-none'
+              onClick={() => openUpdateTarget(config.projectHomepage)}
             >
               <RiGithubLine className='h-4 w-4' />
               {_('打开项目主页')}
-            </Link>
-            <Link
-              href={config.releaseNotesUrl}
-              className='btn btn-outline h-12 rounded-2xl'
+            </button>
+            <button
+              type='button'
+              className='btn h-12 rounded-2xl border-base-300 bg-base-100 text-base-content shadow-none hover:bg-base-100 hover:text-base-content active:bg-base-200 focus-visible:outline-none'
+              onClick={() => openUpdateTarget(config.releaseNotesUrl)}
             >
               <RiDownloadCloud2Line className='h-4 w-4' />
-              {_('查看最新发布说明')}
-            </Link>
+              {_('查看最新版本')}
+            </button>
           </div>
         </div>
       )}

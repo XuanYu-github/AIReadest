@@ -16,6 +16,12 @@ const VELOCITY_THRESHOLD = 0.5;
 const SNAP_THRESHOLD = 0.2;
 const DIALOG_HISTORY_STATE_KEY = '__dialogToken';
 
+const shouldRestoreFocus = (element: HTMLElement | null) => {
+  if (!element || !element.isConnected) return false;
+
+  return !element.closest('[role="menu"], [role="menuitem"], .menu-container, .dropdown');
+};
+
 interface DialogProps {
   id?: string;
   isOpen: boolean;
@@ -126,8 +132,10 @@ const Dialog: React.FC<DialogProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
-      if (previousActiveElementRef.current) {
-        previousActiveElementRef.current.focus();
+      if (shouldRestoreFocus(previousActiveElementRef.current)) {
+        previousActiveElementRef.current?.focus({ preventScroll: true });
+        previousActiveElementRef.current = null;
+      } else {
         previousActiveElementRef.current = null;
       }
       return;

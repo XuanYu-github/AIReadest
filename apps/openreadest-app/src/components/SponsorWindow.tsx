@@ -4,7 +4,6 @@ import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { eventDispatcher } from '@/utils/event';
 import { makeSafeFilename } from '@/utils/misc';
-import Link from './Link';
 import Dialog from './Dialog';
 
 const LOCAL_SUPPORT_CONFIG_URL = '/support/config.json';
@@ -24,7 +23,7 @@ type SupportConfig = {
 const DEFAULT_SUPPORT_CONFIG: Required<SupportConfig> = {
   remoteConfigUrl: '',
   eyebrow: 'OpenReadest Support',
-  title: '请作者吃个鸡腿儿',
+  title: '请作者吃顿拼好饭',
   summary:
     'OpenReadest 是 Readest 的独立分支，继续维护 EPUB、PDF、TXT 等阅读能力，并补强 WebDAV 同步与本地优先体验。',
   detail:
@@ -60,7 +59,6 @@ export const SponsorWindow = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const isAndroid = !!appService?.isAndroidApp;
-  const isDesktop = !!appService?.isDesktopApp;
 
   const effectiveImageUrl = imageLoadFailed ? config.fallbackImageUrl : config.imageUrl;
   const hasRealPoster = !imageLoadFailed && config.imageUrl !== config.fallbackImageUrl;
@@ -72,8 +70,12 @@ export const SponsorWindow = () => {
     return new URL(effectiveImageUrl, window.location.href).toString();
   }, [effectiveImageUrl]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
-    eventDispatcher.dispatch('toast', { message, type });
+  const showToast = (
+    message: string,
+    type: 'success' | 'error' | 'info' | 'warning' = 'info',
+    className = '',
+  ) => {
+    eventDispatcher.dispatch('toast', { message, type, className });
   };
 
   const loadSupportConfig = async () => {
@@ -105,40 +107,69 @@ export const SponsorWindow = () => {
     }
   };
 
-  const handleCopyPosterLink = async () => {
-    try {
-      await navigator.clipboard.writeText(resolvedPosterUrl);
-      showToast(_('收款码链接已复制。'), 'success');
-    } catch (error) {
-      console.error('Failed to copy support poster link:', error);
-      showToast(_('复制收款码链接失败。'), 'error');
+  const loadPosterBinary = async () => {
+    const response = await fetch(resolvedPosterUrl, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
     }
+
+    const blob = await response.blob();
+    const extension = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
+    const filename = makeSafeFilename(`OpenReadest_support_qr.${extension}`);
+
+    return {
+      blob,
+      filename,
+      arrayBuffer: await blob.arrayBuffer(),
+    };
   };
 
-  const handleOpenPoster = () => {
-    window.open(resolvedPosterUrl, '_blank', 'noopener,noreferrer');
-  };
+  const savePosterToLocal = async () => {
+    const { arrayBuffer, blob, filename } = await loadPosterBinary();
 
-  const handleSavePoster = async () => {
-    setIsSaving(true);
-    try {
-      const response = await fetch(resolvedPosterUrl, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+    if (appService) {
+      const saved = await appService.saveFile(filename, arrayBuffer, blob.type || 'image/jpeg');
+      if (!saved) {
+        showToast(_('已取消保存。'), 'info');
+        return false;
       }
-
-      const blob = await response.blob();
-      const extension = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
+    } else {
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
-      link.download = makeSafeFilename(`OpenReadest_support_qr.${extension}`);
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(objectUrl);
+    }
 
-      showToast(_('收款码已开始保存，请到下载目录查看。'), 'success');
+    showToast(_('收款码已开始保存，请到下载目录查看。'), 'success');
+    return true;
+  };
+
+  const handleSupportAction = async () => {
+    if (!hasRealPoster) {
+      showToast(_('赞助海报暂未找到，请稍后重试。'), 'warning');
+      return;
+    }
+
+    if (isAndroid) {
+      showToast(
+        [
+          _('请直接截图二维码。'),
+          _('打开支付宝扫一扫'),
+          _('再从相册里识别'),
+        ].join('\n'),
+        'info',
+        'mx-auto w-[12em] max-w-[80vw] whitespace-pre-line break-keep text-center leading-7',
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await savePosterToLocal();
     } catch (error) {
       console.error('Failed to save support poster:', error);
       showToast(_('保存收款码失败，请稍后重试。'), 'error');
@@ -175,14 +206,14 @@ export const SponsorWindow = () => {
     <Dialog
       id='sponsor_window'
       isOpen={isOpen}
-      title={_('赞助一下')}
+      title={_('为我发"声"')}
       onClose={handleClose}
       boxClassName='sm:!w-[560px] sm:!max-w-[92vw] sm:h-auto'
       contentClassName='px-5 pb-6 sm:px-6'
     >
       {isOpen && (
         <div className='flex flex-col gap-5 py-2'>
-          <div className='rounded-[28px] bg-[linear-gradient(160deg,rgba(255,248,239,0.98),rgba(255,255,255,0.92))] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/5'>
+          <div className='bg-base-200 rounded-[28px] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/5'>
             <div className='flex flex-col gap-3'>
               <div className='space-y-2'>
                 <p className='text-[11px] font-semibold uppercase tracking-[0.28em] text-neutral-content/50'>
@@ -201,79 +232,33 @@ export const SponsorWindow = () => {
             </div>
           </div>
 
-          <div className='rounded-[28px] bg-base-100 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.1)] ring-1 ring-black/5'>
-            <div className='group flex w-full flex-col gap-3 text-left'>
-              <div className='overflow-hidden rounded-[24px] bg-[#f6f1e8]'>
+          <div className='bg-base-200 rounded-[28px] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.1)] ring-1 ring-black/5'>
+            <div className='group flex w-full flex-col gap-4 text-left'>
+              <div className='bg-base-100 overflow-hidden rounded-[24px] ring-1 ring-black/5'>
                 <Image
                   src={effectiveImageUrl}
-                  alt='OpenReadest Logo'
+                  alt='OpenReadest Support Poster'
                   width={512}
                   height={512}
-                  className='mx-auto h-auto w-full max-w-[220px] object-contain py-8'
+                  className='mx-auto h-auto w-full max-w-[240px] object-contain py-6'
                   onError={() => setImageLoadFailed(true)}
                 />
-              </div>
-              <div className='flex items-center justify-between gap-3 px-1'>
-                <div>
-                  <p className='text-sm font-semibold text-base-content'>
-                    {hasRealPoster ? _('收款码已就绪') : _('赞助码准备中')}
-                  </p>
-                  <p className='text-xs text-neutral-content/70'>
-                    {isAndroid
-                      ? hasRealPoster
-                        ? _('Android 端可以继续长按图片保存；桌面端会显示显式按钮，避免把长按当成主要操作。')
-                        : _('当前页面先使用 OpenReadest logo 占位，后续会切换为可远程替换的赞助二维码。')
-                      : hasRealPoster
-                        ? _('Windows 和桌面端改为“保存图片 / 打开大图 / 复制链接”操作，不再依赖长按。')
-                        : _('当前页面先使用 OpenReadest logo 占位，后续会切换为可远程替换的赞助二维码。')}
-                  </p>
-                </div>
-                <span className='rounded-full border border-base-300 px-3 py-1 text-xs text-neutral-content/70'>
-                  {hasRealPoster ? _('可测试') : _('敬请期待')}
-                </span>
               </div>
             </div>
           </div>
 
-          {isDesktop && hasRealPoster && (
-            <div className='grid gap-3 sm:grid-cols-3'>
-              <button
-                type='button'
-                className='btn btn-outline h-12 rounded-2xl'
-                onClick={handleSavePoster}
-                disabled={isSaving}
-              >
-                {isSaving ? _('保存中...') : _('保存收款码')}
-              </button>
-              <button type='button' className='btn btn-outline h-12 rounded-2xl' onClick={handleOpenPoster}>
-                {_('打开大图')}
-              </button>
-              <button
-                type='button'
-                className='btn btn-outline h-12 rounded-2xl'
-                onClick={handleCopyPosterLink}
-              >
-                {_('复制收款码链接')}
-              </button>
-            </div>
-          )}
-
           <div className='grid gap-3 sm:grid-cols-2'>
-            <Link
-              href={config.projectHomepage}
-              className='btn h-12 rounded-2xl border-none bg-black text-white hover:bg-black/90'
+            <button
+              type='button'
+              className='btn btn-primary h-12 rounded-2xl'
+              onClick={handleSupportAction}
+              disabled={!hasRealPoster || isSaving}
             >
-              {_('关注项目进展')}
-            </Link>
-            {hasRealPoster && !isDesktop ? (
-              <Link href={config.releaseNotesUrl} className='btn btn-outline h-12 rounded-2xl'>
-                {_('查看发布页')}
-              </Link>
-            ) : (
+              {isSaving ? _('保存中...') : _('我来助你')}
+            </button>
             <button type='button' className='btn btn-outline h-12 rounded-2xl' onClick={handleClose}>
               {_('下次一定')}
             </button>
-            )}
           </div>
         </div>
       )}

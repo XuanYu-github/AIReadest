@@ -266,7 +266,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ setIsDropdownOpen }) => {
         </>
       )}
       <hr aria-hidden='true' className='border-base-200 my-1' />
-      <MenuItem label={_('赞助一下')} onClick={showSponsorApp} />
+      <MenuItem label={_('为我发"声"')} onClick={showSponsorApp} />
       <MenuItem label={_('检查更新')} onClick={showUpdateWindow} />
       {isWebAppPlatform() && <MenuItem label={_('Download OpenReadest')} onClick={downloadApp} />}
       <MenuItem label={_('About OpenReadest')} onClick={showAboutApp} />

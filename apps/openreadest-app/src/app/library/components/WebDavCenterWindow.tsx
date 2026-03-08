@@ -753,16 +753,18 @@ export const WebDavCenterWindow = () => {
 
           {activeTab === 'download' && (
             <div className='h-72 overflow-y-auto p-2'>
-              <div className='flex items-center justify-between gap-3 px-2 pb-2'>
-                <div className='text-base-content/60 text-xs'>
-                  {_('云端书籍')}
-                  {remoteCountInfo
-                    ? ` · ${_('目录')} ${remoteCountInfo.dirCount} / ${_('清单')} ${remoteCountInfo.libraryCount}`
-                    : ''}
+              <div className='flex flex-col gap-2 px-2 pb-2 sm:flex-row sm:items-center sm:justify-between'>
+                <div className='min-w-0'>
+                  <div className='text-base-content/70 text-xs font-medium'>{_('云端书籍')}</div>
+                  <div className='text-base-content/60 break-words text-[11px] leading-5 sm:text-xs'>
+                    {remoteCountInfo
+                      ? `${_('目录')} ${remoteCountInfo.dirCount} · ${_('清单')} ${remoteCountInfo.libraryCount}`
+                      : ''}
+                  </div>
                 </div>
-                <div className='flex items-center gap-2'>
+                <div className='flex w-full items-center gap-2 sm:w-auto'>
                   <input
-                    className='input input-bordered input-sm w-56'
+                    className='input input-bordered input-sm w-full sm:w-56'
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder={_('搜索')}

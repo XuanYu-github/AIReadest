@@ -96,6 +96,15 @@ export interface GetStorefrontRegionCodeResponse {
   error?: string;
 }
 
+export interface OpenExternalUrlRequest {
+  url: string;
+}
+
+export interface OpenExternalUrlResponse {
+  success: boolean;
+  error?: string;
+}
+
 export async function copyURIToPath(request: CopyURIRequest): Promise<CopyURIResponse> {
   const result = await invoke<CopyURIResponse>('plugin:native-bridge|copy_uri_to_path', {
     payload: request,
@@ -200,6 +209,15 @@ export async function getExternalSDCardPath(): Promise<GetExternalSDCardPathResp
   const result = await invoke<GetExternalSDCardPathResponse>(
     'plugin:native-bridge|get_external_sdcard_path',
   );
+  return result;
+}
+
+export async function openExternalUrlByNativeBridge(
+  request: OpenExternalUrlRequest,
+): Promise<OpenExternalUrlResponse> {
+  const result = await invoke<OpenExternalUrlResponse>('plugin:native-bridge|open_external_url', {
+    payload: request,
+  });
   return result;
 }
 

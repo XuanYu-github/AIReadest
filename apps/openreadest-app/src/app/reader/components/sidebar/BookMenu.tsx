@@ -176,7 +176,7 @@ const BookMenu: React.FC<BookMenuProps> = ({ menuClassName, setIsDropdownOpen })
       />
       <MenuItem label={_('Reload Page')} shortcut='Shift+R' onClick={handleReloadPage} />
       <hr className='border-base-200 my-1' />
-      <MenuItem label={_('赞助一下')} onClick={showSponsorWindow} />
+      <MenuItem label={_('为我发"声"')} onClick={showSponsorWindow} />
       <MenuItem label={_('检查更新')} onClick={showUpdateWindow} />
       {isWebAppPlatform() && <MenuItem label={_('Download OpenReadest')} onClick={downloadReadest} />}
       <MenuItem label={_('About OpenReadest')} onClick={showAboutReadest} />

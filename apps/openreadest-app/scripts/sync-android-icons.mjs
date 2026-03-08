@@ -56,4 +56,4 @@ const syncDirectory = (sourcePath, targetPath) => {
 
 syncDirectory(sourceDir, targetDir);
 
-console.log(`Synced Android launcher icons from ${sourceDir} to ${targetDir}`);
+console.log(`Synced curated Android launcher icons from ${sourceDir} to ${targetDir}`);
