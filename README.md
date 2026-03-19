@@ -1,89 +1,137 @@
-# OpenReadest
+# AIReadest
 
-OpenReadest 是基于 Readest 的非官方 Fork，重点保留本地阅读能力，并新增或强化 WebDAV 同步能力，用于私有云或自建 WebDAV 场景（坚果云、Nextcloud、群晖、WebDAV NAS 等）。上游项目 Readest： https://github.com/readest/readest 。
+AIReadest 是一个基于 Readest / OpenReadest 演进出来的独立阅读器项目，目标是在保留本地优先阅读体验的前提下，提供可自托管、可自带 API 的联网能力。
+
+目前项目重点放在这几类能力上：
+
+- WebDAV 同步：适配私有云、自建 WebDAV、NAS、坚果云、Nextcloud 等场景
+- AI 翻译：允许用户配置自己的 OpenAI-compatible API
+- Ask AI：提供独立悬浮式 AI 对话，而不是依赖官方会员服务
+- 本地优先：尽量避免把阅读能力绑定到账号、订阅或官方云
+
+上游项目：
+
+- Readest: `https://github.com/readest/readest`
+- OpenReadest: `https://github.com/luyishui/OpenReadest`
 
 本项目遵循 AGPL-3.0 许可证发布，并保留上游项目与第三方组件的版权和许可证声明。
 
-## ⚠️ 免责声明 & 项目说明
+## 项目定位
 
-**本项目 (OpenReadest) 是基于原项目 [Readest](https://github.com/readest/readest) 的一个独立 Fork（分支/衍生版本）。**
+AIReadest 不是原版 Readest 的官方版本，也不是 OpenReadest 的镜像仓库，而是一个继续沿着“本地阅读 + 自托管同步 + 自带 API 的 AI 能力”方向发展的独立项目。
 
-为了避免混淆，特此说明：
-1. **独立性**：本项目与原项目 `readest/readest` 是两个相互独立的项目，拥有不同的更新计划和功能路线。
-2. **功能差异**：本项目在原项目基础上增加了特定的新功能，这些修改仅代表本项目的方向。
-3. **问题反馈**：如果你在使用 *本 Fork 版本* 时遇到问题或有功能建议，请直接在本仓库 (`luyishui/OpenReadest`) 提出，不要打扰原项目的开发者。
-4. **尊重原项目**：原项目的所有荣誉归原作者所有。本项目严格遵循原项目的开源协议 (AGPL-3.0) 进行分发。
+这个项目的核心思路是：
 
-感谢原项目 [Readest](https://github.com/readest/readest) 提供的优秀基础！
+1. 阅读器本体应当尽量独立可用
+2. 联网功能应优先支持用户自己的服务和自己的密钥
+3. 新增能力不应依赖官方会员体系才能使用
 
----
+## 当前功能
 
-## 功能对比
+### 阅读能力
 
-| 能力 | 原版 Readest | OpenReadest |
-|:---|:---:|:---:|
-| EPUB/PDF/FB2/MOBI/CBZ 阅读 | ✅ | ✅ |
-| 批注/书签/进度 | ✅ | ✅ |
-| 多端支持（桌面/移动） | ✅ | ✅ |
-| WebDAV 同步 | 部分/无内置场景 | ✅ 强化 |
-| AI 朗读（无限） | ✅ | ❌ |
-| DeepL 翻译 | ✅ | ❌ |
+- EPUB / PDF / FB2 / MOBI / CBZ 等常见格式阅读
+- 批注、书签、阅读进度、目录导航
+- 桌面端与移动端多平台支持
 
-> **提示：** 如需体验完整功能（AI 朗读、DeepL 翻译等），建议使用原版 Readest：https://github.com/readest/readest
+### WebDAV
 
-## 已移除能力
+- 书籍文件同步
+- 封面同步
+- 配置同步
+- 笔记同步
+- 手动同步入口
+- 面向私有 WebDAV 场景的使用方式
 
-- 账号登录
-- 原项目云空间
-- 付费订阅与功能
-- 遥测与错误上报
-- Discord Rich Presence
-- KOReader 插件中的原 Readest 云同步入口
+### AI 翻译
 
-## 下载
+- 可在设置页中启用 AI 翻译
+- 支持自定义 `baseUrl`、`apiKey`、`model`
+- 面向 OpenAI-compatible 接口
+- 适合接入自建中转、第三方兼容网关或自己的模型服务
 
-当前临时构建产物可放在仓库根目录的 `release/` 目录中，便于本地测试与直接分发。
+### Ask AI
 
-正式公开发布时，仍建议通过 GitHub Releases 或其他独立分发渠道提供。
+- 阅读器顶栏提供 `Ask AI` 入口
+- 选中文本工具中提供 `Ask AI` 入口
+- 独立悬浮对话框
+- 可基于当前选中文本提问
+- 本地会话持久化
+- 支持 `OpenAI-compatible` 与 `Ollama`
 
-## WebDAV 配置（简要）
+## 与上游方向的差异
 
-1. 打开应用设置中的 WebDAV 相关入口。
-2. 填写服务地址、用户名、密码、远程目录。
-3. 执行连接测试后保存。
-4. 选择同步方向或双向同步并开始。
+相较于原版 Readest / 其他衍生版本，AIReadest 当前更关注这些方向：
 
-建议远程目录使用独立目录（如 `/OpenReadest`），避免与其他程序混用。
+- 保留本地阅读体验
+- 强化 WebDAV 同步
+- 引入可由用户自行配置的 AI 翻译与 AI 对话
+- 尽量不依赖登录、订阅和官方托管服务
+
+## 已知状态
+
+当前仓库已经完成的主要工作包括：
+
+- AI 翻译基础链路接入
+- Ask AI 最小可用链路接入
+- fixed-layout 阅读场景下的若干空指针/空对象崩溃保护
+
+后续仍会继续完善，例如：
+
+- Ask AI 的截图/附件能力
+- 更完整的 AI 会话体验
+- 更多同步与恢复细节
+- 更多阅读器稳定性修复
+
+## 使用说明
+
+### WebDAV
+
+1. 打开应用设置中的 WebDAV 入口
+2. 填写服务地址、用户名、密码和远程目录
+3. 测试连接并保存
+4. 按需执行同步
+
+建议为 AIReadest 使用单独远程目录，例如 `/AIReadest`，避免与其他程序混用。
+
+### AI 翻译
+
+1. 打开设置中的 `AI Translation`
+2. 启用功能
+3. 填写 `Base URL`、`API Key`、`Model`
+4. 保存后即可在阅读流程中使用
+
+### Ask AI
+
+1. 打开设置中的 `AI`
+2. 启用 `Ask AI`
+3. 选择 `Ollama` 或 `OpenAI Compatible`
+4. 填写对应配置后测试连接
+5. 回到阅读器，从顶栏或选中文本入口打开 `Ask AI`
+
+## 仓库说明
+
+- 主仓库用于承载 AIReadest 应用本体
+- 部分上游能力通过 submodule 方式引用
+- 构建产物、缓存目录和本地敏感配置不应直接提交到公开仓库
+
+## 隐私与配置提醒
+
+请不要把以下内容提交到公开仓库：
+
+- `.env`
+- `.env.local`
+- 私有 API Key
+- 各类本地测试配置
+
+如果你是此仓库的二次修改者，也建议继续保持这一约定。
 
 ## 版权与许可
 
-- 上游项目：Readest（https://github.com/readest/readest），原始版权归 Bilingify LLC 与 Readest contributors 所有。
-- Fork 修改：OpenReadest 的新增与修改部分版权归 luyishui 所有。
-- 许可证文本：详见 [LICENSE](LICENSE)。
-- Fork 归属与额外版权说明：详见 [NOTICE.md](NOTICE.md)。
-- 第三方组件：各自许可证继续按原要求保留与分发。
+- 上游项目版权归原作者与各自贡献者所有
+- AIReadest 的新增与修改部分版权归对应贡献者所有
+- 许可证文本见 `LICENSE`
+- 额外归属说明见 `NOTICE.md`
+- 第三方依赖继续遵循各自许可证
 
-如果你分发修改后的版本，仍应继续保留上游版权、许可证文本与第三方许可证声明。
-
-## 使用的上游组件
-
-- Tauri 与 tauri-plugins：提供桌面与移动端打包、系统能力桥接与插件基础设施。
-- foliate-js：提供 EPUB、FB2、MOBI、CBZ 等电子书解析与渲染能力。
-- simplecc-wasm 与 OpenCC：提供简繁转换相关能力。
-- pdf.js：提供 PDF 阅读相关能力。
-
-本仓库保留当前发布与构建需要的上游源码快照、许可证与必要说明，但不会把这些上游项目各自的完整仓库历史作为 OpenReadest 主仓库的一部分继续公开分发。
-
-## 发布说明
-
-公开仓库默认不提交打包产物、构建缓存与本地生成目录。最终发布前请通过独立构建流程生成 Windows 与 Android 安装包。
-
-## 💖 支持本项目
-
-如果你觉得本项目对你有帮助，欢迎考虑支持项目的持续维护和开发。你的支持将用于服务器成本、代码维护以及新功能的开发。
-
-### 捐赠方式
-
-可以扫码支持项目维护：
-
-![OpenReadest 捐赠码](./assets/donate.jpg)
+如果你分发修改后的版本，请继续保留上游版权、许可证文本和第三方许可证声明。
