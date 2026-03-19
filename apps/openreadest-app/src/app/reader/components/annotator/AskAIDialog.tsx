@@ -4,6 +4,7 @@ import {
   LuImagePlus,
   LuMessageSquarePlus,
   LuPencil,
+  LuScreenShare,
   LuSendHorizontal,
   LuSplit,
   LuTrash2,
@@ -73,6 +74,41 @@ const fileToDataUrl = async (file: Blob): Promise<string> =>
     reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+
+const captureStreamFrame = async (stream: MediaStream): Promise<File> => {
+  const video = document.createElement('video');
+  video.srcObject = stream;
+  video.muted = true;
+  video.playsInline = true;
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error('Failed to read captured screen stream'));
+  });
+
+  await video.play();
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || window.innerWidth;
+  canvas.height = video.videoHeight || window.innerHeight;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Failed to create screenshot canvas');
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((value) => {
+      if (value) resolve(value);
+      else reject(new Error('Failed to create screenshot image'));
+    }, 'image/png');
+  });
+
+  stream.getTracks().forEach((track) => track.stop());
+  video.srcObject = null;
+  return new File([blob], `screenshot-${Date.now()}.png`, { type: 'image/png' });
+};
 
 const toStoredAttachments = (items: Attachment[]): AIMessageAttachment[] =>
   items.map((item) => ({
@@ -421,6 +457,68 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       setAttachments((prev) => [...prev, ...nextAttachments]);
     }
   }, [_, appService, selectFiles]);
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setError(_('Screen capture is not supported in this environment.'));
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 1, max: 2 } },
+        audio: false,
+      });
+      const file = await captureStreamFrame(stream);
+      const dataUrl = await fileToDataUrl(file);
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: generateId(),
+          name: file.name,
+          dataUrl,
+          mediaType: file.type || 'image/png',
+        },
+      ]);
+      setError('');
+    } catch (captureError) {
+      const message = (captureError as Error)?.message || '';
+      if (/cancel|denied|dismissed|abort/i.test(message)) return;
+      setError(message || _('Unable to capture screenshot.'));
+    }
+  }, [_]);
+
+  const handlePaste = useCallback(
+    async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = Array.from(event.clipboardData?.items || []);
+      const imageItems = items.filter((item) => item.type.startsWith('image/'));
+      if (imageItems.length === 0) return;
+
+      event.preventDefault();
+      const nextAttachments: Attachment[] = [];
+      for (const item of imageItems) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        try {
+          const dataUrl = await fileToDataUrl(file);
+          nextAttachments.push({
+            id: generateId(),
+            name: file.name || `clipboard-${Date.now()}.png`,
+            dataUrl,
+            mediaType: file.type || 'image/png',
+          });
+        } catch (pasteError) {
+          setError((pasteError as Error).message || _('Unable to read pasted image.'));
+        }
+      }
+
+      if (nextAttachments.length > 0) {
+        setAttachments((prev) => [...prev, ...nextAttachments]);
+        setError('');
+      }
+    },
+    [_],
+  );
 
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((item) => item.id !== id));
@@ -790,11 +888,15 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
                 <LuImagePlus className='mr-1 size-4' />
                 {_('Upload Image')}
               </button>
-              {isTauriAppPlatform() ? (
-                <div className='text-base-content/60 text-xs'>
-                  {_('Screenshot capture is not connected yet in AIReadest; image upload is available now.')}
-                </div>
-              ) : null}
+              <button className='btn btn-outline btn-sm' onClick={() => void handleCaptureScreenshot()}>
+                <LuScreenShare className='mr-1 size-4' />
+                {_('Capture Screen')}
+              </button>
+              <div className='text-base-content/60 text-xs'>
+                {isTauriAppPlatform()
+                  ? _('You can capture the screen or paste an image from the clipboard.')
+                  : _('You can capture the screen or paste an image from the clipboard.')}
+              </div>
             </div>
 
             <div className='flex gap-3'>
@@ -804,6 +906,9 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
                 placeholder={_('Ask a question about the current selection or the book...')}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onPaste={(e) => {
+                  void handlePaste(e);
+                }}
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
@@ -829,7 +934,9 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
                 </button>
               </div>
             </div>
-            <div className='text-base-content/50 mt-2 text-xs'>{_('Press Ctrl/Cmd + Enter to send.')}</div>
+            <div className='text-base-content/50 mt-2 text-xs'>
+              {_('Press Ctrl/Cmd + Enter to send. Paste images into the input box to attach them.')}
+            </div>
           </div>
 
           <div
