@@ -25,6 +25,7 @@ import BookmarkToggler from './BookmarkToggler';
 import NotebookToggler from './NotebookToggler';
 import SettingsToggler from './SettingsToggler';
 import TranslationToggler from './TranslationToggler';
+import AskAIToggler from './AskAIToggler';
 import ViewMenu from './ViewMenu';
 
 interface HeaderBarProps {
@@ -167,6 +168,7 @@ const HeaderBar: React.FC<HeaderBarProps> = ({
           </div>
           <BookmarkToggler bookKey={bookKey} />
           <TranslationToggler bookKey={bookKey} />
+          <AskAIToggler bookKey={bookKey} />
           {enableAnnotationQuickActions && (
             <Dropdown
               label={

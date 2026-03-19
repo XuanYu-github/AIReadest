@@ -13,7 +13,13 @@ import {
   ViewConfig,
   ViewSettings,
 } from '@/types/book';
-import { KOSyncSettings, ReadSettings, SystemSettings } from '@/types/settings';
+import {
+  AITranslationSettings,
+  KOSyncSettings,
+  ReadSettings,
+  SystemSettings,
+} from '@/types/settings';
+import { DEFAULT_AI_SETTINGS } from '@/services/ai/constants';
 import { UserStorageQuota, UserDailyTranslationQuota } from '@/types/quota';
 import { getDefaultMaxBlockSize, getDefaultMaxInlineSize } from '@/utils/config';
 import { stubTranslation as _ } from '@/utils/misc';
@@ -55,6 +61,17 @@ export const DEFAULT_KOSYNC_SETTINGS = {
   enabled: false,
 } as KOSyncSettings;
 
+export const DEFAULT_AI_TRANSLATION_SETTINGS = {
+  enabled: false,
+  baseUrl: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: 'gpt-4o-mini',
+  models: '',
+  systemPrompt: '',
+} as AITranslationSettings;
+
+export const DEFAULT_ASK_AI_SETTINGS = DEFAULT_AI_SETTINGS;
+
 export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   keepLogin: false,
   autoUpload: true,
@@ -79,6 +96,8 @@ export const DEFAULT_SYSTEM_SETTINGS: Partial<SystemSettings> = {
   libraryColumns: 6,
 
   kosync: DEFAULT_KOSYNC_SETTINGS,
+  aiTranslation: DEFAULT_AI_TRANSLATION_SETTINGS,
+  aiSettings: DEFAULT_ASK_AI_SETTINGS,
 
   lastSyncedAtBooks: 0,
   lastSyncedAtConfigs: 0,

@@ -6,5 +6,6 @@ export type AnnotationToolType =
   | 'dictionary'
   | 'wikipedia'
   | 'translate'
+  | 'ask-ai'
   | 'tts'
   | 'proofread';

@@ -1,6 +1,7 @@
 import { CustomTheme } from '@/styles/themes';
 import { CustomFont } from '@/styles/fonts';
 import { CustomTexture } from '@/styles/textures';
+import { AISettings } from '@/services/ai/types';
 import { HighlightColor, HighlightStyle, ViewSettings } from './book';
 import { OPDSCatalog } from './opds';
 
@@ -46,6 +47,16 @@ export interface KOSyncSettings {
   strategy: KOSyncStrategy;
 }
 
+export interface AITranslationSettings {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  models: string;
+  systemPrompt: string;
+  apiUrl?: string;
+}
+
 export interface SystemSettings {
   version: number;
   localBooksDir: string;
@@ -79,6 +90,8 @@ export interface SystemSettings {
   opdsCatalogs: OPDSCatalog[];
 
   kosync: KOSyncSettings;
+  aiTranslation: AITranslationSettings;
+  aiSettings: AISettings;
 
   lastSyncedAtBooks: number;
   lastSyncedAtConfigs: number;

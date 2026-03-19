@@ -256,6 +256,14 @@ export abstract class BaseAppService implements AppService {
       ...(this.isMobile ? DEFAULT_MOBILE_SYSTEM_SETTINGS : {}),
       ...settings,
     };
+    settings.aiTranslation = {
+      ...DEFAULT_SYSTEM_SETTINGS.aiTranslation,
+      ...settings.aiTranslation,
+    };
+    settings.aiSettings = {
+      ...DEFAULT_SYSTEM_SETTINGS.aiSettings,
+      ...settings.aiSettings,
+    };
     settings.globalReadSettings = {
       ...DEFAULT_READSETTINGS,
       ...(this.isMobile ? DEFAULT_MOBILE_READSETTINGS : {}),

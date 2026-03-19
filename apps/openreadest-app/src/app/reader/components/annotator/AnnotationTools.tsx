@@ -8,6 +8,7 @@ import { BsTranslate } from 'react-icons/bs';
 import { TbHexagonLetterD } from 'react-icons/tb';
 import { FaHeadphones } from 'react-icons/fa6';
 import { IoIosBuild } from 'react-icons/io';
+import { RiRobot2Line } from 'react-icons/ri';
 import { AnnotationToolType } from '@/types/annotator';
 import { stubTranslation as _ } from '@/utils/misc';
 
@@ -77,6 +78,12 @@ export const annotationToolButtons = createAnnotationToolButtons([
     tooltip: _('Translate text after selection'),
     Icon: BsTranslate,
     quickAction: true,
+  },
+  {
+    type: 'ask-ai',
+    label: _('Ask AI'),
+    tooltip: _('Ask AI about the selected text'),
+    Icon: RiRobot2Line,
   },
   {
     type: 'tts',

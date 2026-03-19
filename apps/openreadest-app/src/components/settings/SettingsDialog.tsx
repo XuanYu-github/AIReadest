@@ -5,7 +5,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
 import { useTranslation } from '@/hooks/useTranslation';
 import { RiFontSize } from 'react-icons/ri';
-import { RiDashboardLine, RiTranslate } from 'react-icons/ri';
+import { RiDashboardLine, RiRobot2Line, RiTranslate } from 'react-icons/ri';
 import { VscSymbolColor } from 'react-icons/vsc';
 import { PiDotsThreeVerticalBold } from 'react-icons/pi';
 import { LiaHandPointerSolid } from 'react-icons/lia';
@@ -21,8 +21,10 @@ import DialogMenu from './DialogMenu';
 import ControlPanel from './ControlPanel';
 import LangPanel from './LangPanel';
 import MiscPanel from './MiscPanel';
+import AITranslationPanel from './AITranslationPanel';
+import AIPanel from './AIPanel';
 
-export type SettingsPanelType = 'Font' | 'Layout' | 'Color' | 'Control' | 'Language' | 'Custom';
+export type SettingsPanelType = 'Font' | 'Layout' | 'Color' | 'Control' | 'Language' | 'AI' | 'Custom';
 export type SettingsPanelPanelProp = {
   bookKey: string;
   onRegisterReset: (resetFn: () => void) => void;
@@ -70,6 +72,11 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
       label: _('Language'),
     },
     {
+      tab: 'AI',
+      icon: RiRobot2Line,
+      label: _('AI'),
+    },
+    {
       tab: 'Custom',
       icon: IoAccessibilityOutline,
       label: _('Custom'),
@@ -98,6 +105,7 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     Color: null,
     Control: null,
     Language: null,
+    AI: null,
     Custom: null,
   });
 
@@ -212,11 +220,11 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
                 >
                   <Icon className='mr-0' />
                   <span
-                    className={clsx(
-                      window.innerWidth < 640 && 'hidden',
-                      !(showAllTabLabels || activePanel === tab) && 'hidden',
-                    )}
-                  >
+                      className={clsx(
+                        typeof window !== 'undefined' && window.innerWidth < 640 && 'hidden',
+                        !(showAllTabLabels || activePanel === tab) && 'hidden',
+                      )}
+                    >
                     {label}
                   </span>
                 </button>
@@ -279,11 +287,16 @@ const SettingsDialog: React.FC<{ bookKey: string }> = ({ bookKey }) => {
           />
         )}
         {activePanel === 'Language' && (
-          <LangPanel
-            bookKey={bookKey}
-            onRegisterReset={(fn) => registerResetFunction('Language', fn)}
-          />
+          <>
+            <LangPanel
+              bookKey={bookKey}
+              onRegisterReset={(fn) => registerResetFunction('Language', fn)}
+            />
+            <div className='divider my-2' />
+            <AITranslationPanel bookKey={bookKey} />
+          </>
         )}
+        {activePanel === 'AI' && <AIPanel />}
         {activePanel === 'Custom' && (
           <MiscPanel
             bookKey={bookKey}
