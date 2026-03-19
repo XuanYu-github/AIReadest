@@ -81,6 +81,27 @@ class AIStore {
     });
   }
 
+  async updateMessage(id: string, updates: Partial<Pick<AIMessage, 'content' | 'attachments'>>): Promise<void> {
+    const db = await this.openDB();
+    const existing = await new Promise<AIMessage | undefined>((resolve, reject) => {
+      const request = db.transaction(MESSAGES_STORE, 'readonly').objectStore(MESSAGES_STORE).get(id);
+      request.onsuccess = () => resolve(request.result as AIMessage | undefined);
+      request.onerror = () => reject(request.error);
+    });
+    if (!existing) return;
+    await this.saveMessage({ ...existing, ...updates });
+  }
+
+  async deleteMessage(id: string): Promise<void> {
+    const db = await this.openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(MESSAGES_STORE, 'readwrite');
+      tx.objectStore(MESSAGES_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async updateConversationTitle(id: string, title: string): Promise<void> {
     const db = await this.openDB();
     const conversation = await new Promise<AIConversation | undefined>((resolve, reject) => {

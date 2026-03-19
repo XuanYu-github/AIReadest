@@ -2,6 +2,19 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { isTauriAppPlatform } from '@/services/environment';
 import type { AIProvider, AISettings, AIChatMessage, AIChatOptions } from '../types';
 
+const flattenContent = (content: AIChatMessage['content']) => {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((part): part is Extract<(typeof content)[number], { type: 'text' }> => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n');
+};
+
+const buildDirectMessages = (messages: AIChatMessage[], system?: string) => {
+  const payload = system ? [{ role: 'system' as const, content: system }, ...messages] : messages;
+  return payload.map((message) => ({ role: message.role, content: flattenContent(message.content) }));
+};
+
 export class OllamaProvider implements AIProvider {
   id = 'ollama' as const;
   name = 'Ollama';
@@ -43,9 +56,7 @@ export class OllamaProvider implements AIProvider {
         body: JSON.stringify({
           model: this.settings.ollamaModel,
           stream: false,
-          messages: options?.system
-            ? [{ role: 'system', content: options.system }, ...messages]
-            : messages,
+          messages: buildDirectMessages(messages, options?.system),
           options: options?.maxOutputTokens ? { num_predict: options.maxOutputTokens } : undefined,
         }),
       },

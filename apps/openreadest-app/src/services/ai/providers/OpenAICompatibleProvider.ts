@@ -2,6 +2,17 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { isTauriAppPlatform } from '@/services/environment';
 import type { AIProvider, AISettings, AIChatMessage, AIChatOptions } from '../types';
 
+const buildDirectMessages = (messages: AIChatMessage[], system?: string) =>
+  system ? [{ role: 'system' as const, content: system }, ...messages] : messages;
+
+const toOpenAIContent = (content: AIChatMessage['content']) => {
+  if (typeof content === 'string') return content;
+  return content.map((part) => {
+    if (part.type === 'text') return { type: 'text', text: part.text };
+    return { type: 'image_url', image_url: { url: part.image } };
+  });
+};
+
 export class OpenAICompatibleProvider implements AIProvider {
   id = 'openai-compatible' as const;
   name = 'OpenAI Compatible';
@@ -46,9 +57,10 @@ export class OpenAICompatibleProvider implements AIProvider {
         },
         body: JSON.stringify({
           model: this.settings.openaiModel,
-          messages: options?.system
-            ? [{ role: 'system', content: options.system }, ...messages]
-            : messages,
+          messages: buildDirectMessages(messages, options?.system).map((message) => ({
+            role: message.role,
+            content: toOpenAIContent(message.content),
+          })),
           max_tokens: options?.maxOutputTokens,
         }),
       },

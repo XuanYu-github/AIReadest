@@ -18,17 +18,28 @@ export interface AIConversation {
   updatedAt: number;
 }
 
+export interface AIMessageAttachment {
+  name: string;
+  dataUrl: string;
+  mediaType: string;
+}
+
 export interface AIMessage {
   id: string;
   conversationId: string;
   role: 'user' | 'assistant';
   content: string;
+  attachments?: AIMessageAttachment[];
   createdAt: number;
 }
 
+export type AIChatMessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; image: string; mediaType?: string };
+
 export interface AIChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | AIChatMessagePart[];
 }
 
 export interface AIChatOptions {
