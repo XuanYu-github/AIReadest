@@ -3,6 +3,9 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": ["main", "reader-*"],
+  "remote": {
+    "urls": ["http://localhost:3000", "http://localhost:3000/*"]
+  },
   "permissions": [
     "core:default",
     "fs:default",

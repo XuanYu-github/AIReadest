@@ -296,7 +296,12 @@ pub fn run() {
             );
 
             let app_handle = app.handle().clone();
-            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+            #[cfg(debug_assertions)]
+            let main_window_url = WebviewUrl::External(Url::parse("http://localhost:3000").unwrap());
+            #[cfg(not(debug_assertions))]
+            let main_window_url = WebviewUrl::default();
+
+            let win_builder = WebviewWindowBuilder::new(app, "main", main_window_url)
                 .background_throttling(BackgroundThrottlingPolicy::Disabled)
                 .background_color(if is_eink {
                     tauri::window::Color(255, 255, 255, 255)

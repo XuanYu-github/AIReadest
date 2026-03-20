@@ -899,6 +899,12 @@ export abstract class BaseAppService implements AppService {
    */
   private async safeLoadJSON<T>(filename: string, base: BaseDir, defaultValue: T): Promise<T> {
     const backupFilename = `${filename}.bak`;
+    const mainExists = await this.fs.exists(filename, base);
+    const backupExists = await this.fs.exists(backupFilename, base);
+
+    if (!mainExists && !backupExists) {
+      return defaultValue;
+    }
 
     // Try loading main file
     const mainResult = await this.loadJSONFile(filename, base);
