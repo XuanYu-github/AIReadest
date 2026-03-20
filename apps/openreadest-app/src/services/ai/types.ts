@@ -8,6 +8,8 @@ export interface AISettings {
   openaiBaseUrl: string;
   openaiApiKey: string;
   openaiModel: string;
+  reasoningEffort: 'low' | 'medium' | 'high';
+  maxOutputTokens: number;
 }
 
 export interface AIConversation {
@@ -45,6 +47,7 @@ export interface AIChatMessage {
 export interface AIChatOptions {
   system?: string;
   maxOutputTokens?: number;
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 export interface AIProvider {

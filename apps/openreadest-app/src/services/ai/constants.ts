@@ -8,6 +8,8 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   openaiBaseUrl: 'https://api.openai.com/v1',
   openaiApiKey: '',
   openaiModel: 'gpt-4o-mini',
+  reasoningEffort: 'medium',
+  maxOutputTokens: 1024,
 };
 
 export const ASK_AI_LOCAL_CONVERSATION_KEY_PREFIX = 'ask-ai-conversation';

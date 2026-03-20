@@ -54,6 +54,7 @@ export async function POST(req: Request): Promise<Response> {
       model?: unknown;
       baseUrl?: unknown;
       maxOutputTokens?: unknown;
+      reasoningEffort?: unknown;
     };
 
     try {
@@ -77,6 +78,12 @@ export async function POST(req: Request): Promise<Response> {
     const baseUrl = typeof parsedBody.baseUrl === 'string' ? parsedBody.baseUrl : undefined;
     const maxOutputTokens =
       typeof parsedBody.maxOutputTokens === 'number' ? parsedBody.maxOutputTokens : undefined;
+    const reasoningEffort =
+      parsedBody.reasoningEffort === 'low' ||
+      parsedBody.reasoningEffort === 'medium' ||
+      parsedBody.reasoningEffort === 'high'
+        ? parsedBody.reasoningEffort
+        : undefined;
 
     if (!baseUrl) {
       const { user, token } = await validateUserAndToken(req.headers.get('authorization'));
@@ -143,6 +150,7 @@ export async function POST(req: Request): Promise<Response> {
               model,
               messages: toOpenAICompatibleMessages(fullMessages),
               max_tokens: maxOutputTokens,
+              reasoning: reasoningEffort ? { effort: reasoningEffort } : undefined,
             }),
           });
 

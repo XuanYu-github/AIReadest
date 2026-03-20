@@ -48,6 +48,7 @@ const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 680;
 const MIN_WIDTH = 460;
 const MIN_HEIGHT = 420;
+const DIALOG_POSITION_KEY = 'ask-ai-dialog-position';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -223,6 +224,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [dialogSize, setDialogSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
+  const [dialogPosition, setDialogPosition] = useState({ x: 16, y: 56 });
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const payloadMessagesRef = useRef<AIChatMessage[]>([]);
@@ -255,6 +257,23 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       // ignore invalid persisted size
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const raw = window.localStorage.getItem(DIALOG_POSITION_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { x?: number; y?: number };
+      if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+        setDialogPosition({
+          x: clamp(parsed.x, 8, Math.max(8, window.innerWidth - dialogSize.width - 8)),
+          y: clamp(parsed.y, 8, Math.max(8, window.innerHeight - dialogSize.height - 8)),
+        });
+      }
+    } catch {
+      // ignore invalid persisted position
+    }
+  }, [dialogSize.height, dialogSize.width, isOpen]);
 
   useEffect(() => {
     if (!isOpen || !bookHash) return;
@@ -321,11 +340,31 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
     window.localStorage.setItem(DIALOG_SIZE_KEY, JSON.stringify(next));
   }, [dialogSize.height, dialogSize.width]);
 
+  const handleMove = useCallback(
+    ({ deltaX, deltaY }: { clientX: number; clientY: number; deltaX: number; deltaY: number }) => {
+      setDialogPosition((prev) => ({
+        x: clamp(prev.x + deltaX, 8, Math.max(8, window.innerWidth - dialogSize.width - 8)),
+        y: clamp(prev.y + deltaY, 8, Math.max(8, window.innerHeight - dialogSize.height - 8)),
+      }));
+    },
+    [dialogSize.height, dialogSize.width],
+  );
+
+  const handleMoveKeyDown = useCallback(() => {}, []);
+
+  const handleMoveEnd = useCallback(() => {
+    window.localStorage.setItem(
+      DIALOG_POSITION_KEY,
+      JSON.stringify({ x: Math.round(dialogPosition.x), y: Math.round(dialogPosition.y) }),
+    );
+  }, [dialogPosition.x, dialogPosition.y]);
+
   const { handleDragStart: handleResizeStart } = useDrag(
     handleResizeMove,
     handleResizeKeyDown,
     handleResizeEnd,
   );
+  const { handleDragStart: handleMoveStart } = useDrag(handleMove, handleMoveKeyDown, handleMoveEnd);
 
   const conversationOptions = useMemo(
     () => conversations.map((item) => ({ value: item.id, label: item.title })),
@@ -393,7 +432,8 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
     async (payload: AIChatMessage[]) =>
       await getAIProvider(aiSettings).chat(payload, {
         system: DEFAULT_SYSTEM_PROMPT,
-        maxOutputTokens: 1024,
+        maxOutputTokens: aiSettings.maxOutputTokens,
+        reasoningEffort: aiSettings.reasoningEffort,
       }),
     [aiSettings],
   );
@@ -689,9 +729,16 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
           style={{
             width: `min(96vw, ${dialogSize.width}px)`,
             height: `min(82vh, ${dialogSize.height}px)`,
+            left: `${dialogPosition.x}px`,
+            top: `${dialogPosition.y}px`,
+            right: 'auto',
           }}
         >
-          <div className='flex items-center gap-3 border-b border-base-300 px-4 py-3'>
+          <div
+            className='flex cursor-move items-center gap-3 border-b border-base-300 px-4 py-3'
+            onMouseDown={handleMoveStart}
+            onTouchStart={handleMoveStart}
+          >
             <div className='min-w-0 flex-1'>
               <div className='truncate text-sm font-semibold'>{dialogTitle}</div>
               <div className='text-base-content/60 text-xs'>

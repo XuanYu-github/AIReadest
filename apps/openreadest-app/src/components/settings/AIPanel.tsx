@@ -239,6 +239,50 @@ const AIPanel: React.FC = () => {
           )}
         </div>
       </div>
+
+      <div className={clsx('w-full', disabledSection)}>
+        <h2 className='mb-2 font-medium'>{_('Generation')}</h2>
+        <div className='card border-base-200 bg-base-100 border shadow'>
+          <div className='divide-base-200 divide-y'>
+            <div className='config-item !h-auto flex-col !items-start gap-2 py-3'>
+              <span>{_('Thinking Effort')}</span>
+              <select
+                className='select select-bordered select-sm w-full'
+                value={aiSettings.reasoningEffort}
+                onChange={(e) =>
+                  void updateAiSettings({
+                    reasoningEffort: e.target.value as AISettings['reasoningEffort'],
+                  })
+                }
+              >
+                <option value='low'>{_('Low')}</option>
+                <option value='medium'>{_('Medium')}</option>
+                <option value='high'>{_('High')}</option>
+              </select>
+            </div>
+
+            <div className='config-item !h-auto flex-col !items-start gap-2 py-3'>
+              <div className='flex w-full items-center justify-between gap-3'>
+                <span>{_('Max Output Tokens')}</span>
+                <span className='text-base-content/60 text-xs'>{aiSettings.maxOutputTokens}</span>
+              </div>
+              <input
+                type='range'
+                min='256'
+                max='4096'
+                step='128'
+                className='range range-sm w-full'
+                value={aiSettings.maxOutputTokens}
+                onChange={(e) => void updateAiSettings({ maxOutputTokens: Number(e.target.value) })}
+              />
+              <div className='text-base-content/60 flex w-full justify-between text-xs'>
+                <span>256</span>
+                <span>4096</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

@@ -33,6 +33,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           model: this.settings.openaiModel,
           baseUrl: this.settings.openaiBaseUrl,
           maxOutputTokens: options?.maxOutputTokens,
+          reasoningEffort: options?.reasoningEffort,
         }),
       });
       const text = await response.text();
@@ -62,6 +63,7 @@ export class OpenAICompatibleProvider implements AIProvider {
             content: toOpenAIContent(message.content),
           })),
           max_tokens: options?.maxOutputTokens,
+          reasoning: options?.reasoningEffort ? { effort: options.reasoningEffort } : undefined,
         }),
       },
     );
