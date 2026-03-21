@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
+  LuAppWindow,
   LuChevronDown,
   LuChevronUp,
   LuCopy,
   LuImagePlus,
+  LuMaximize2,
   LuMessageSquarePlus,
+  LuMinimize2,
   LuPencil,
   LuScreenShare,
   LuSendHorizontal,
@@ -13,6 +16,7 @@ import {
   LuTrash2,
   LuX,
 } from 'react-icons/lu';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import ModalPortal from '@/components/ModalPortal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSettingsStore } from '@/store/settingsStore';
@@ -26,6 +30,7 @@ import { useEnv } from '@/context/EnvContext';
 import { useFileSelector } from '@/hooks/useFileSelector';
 import { isTauriAppPlatform } from '@/services/environment';
 import { useReaderStore } from '@/store/readerStore';
+import { showCaptureWindow } from '@/utils/captureWindow';
 import {
   getMonitorCaptureGeometry,
   getNativeCaptureGeometry,
@@ -424,6 +429,21 @@ const buildCurrentUserMessage = (
   return { role: 'user', content: parts };
 };
 
+type CaptureWindowSelectionPayload = {
+  rect: CaptureRect;
+  viewport: { width: number; height: number };
+  scaleFactor?: number;
+  windowOuterPosition?: { x: number; y: number } | null;
+  windowOuterSize?: { width: number; height: number } | null;
+  windowInnerPosition?: { x: number; y: number } | null;
+  windowInnerSize?: { width: number; height: number } | null;
+  monitor: {
+    name?: string | null;
+    position: { x: number; y: number };
+    size: { width: number; height: number };
+  } | null;
+};
+
 const buildTranscript = (
   title: string,
   context: string,
@@ -477,6 +497,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [dialogSize, setDialogSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [reasoningEffort, setReasoningEffort] = useState(aiSettings.reasoningEffort);
   const [maxOutputTokens, setMaxOutputTokens] = useState(aiSettings.maxOutputTokens);
   const [selectionExpanded, setSelectionExpanded] = useState(false);
@@ -489,6 +510,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const payloadMessagesRef = useRef<AIChatMessage[]>([]);
   const dialogSizeRef = useRef(dialogSize);
+  const previousDialogSizeRef = useRef(dialogSize);
   const resizeStartRef = useRef<{
     x: number;
     y: number;
@@ -514,6 +536,12 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
   useEffect(() => {
     dialogSizeRef.current = dialogSize;
   }, [dialogSize]);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      previousDialogSizeRef.current = dialogSize;
+    }
+  }, [dialogSize, isFullscreen]);
 
   useEffect(
     () => () => {
@@ -592,6 +620,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
 
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>, axis: 'both' | 'x' | 'y' = 'both') => {
+      if (isFullscreen) return;
       event.stopPropagation();
       event.preventDefault();
       const target = event.currentTarget;
@@ -653,8 +682,23 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       window.addEventListener('pointercancel', handleEnd, { once: true });
       window.addEventListener('blur', handleBlur, { once: true });
     },
-    [],
+    [isFullscreen],
   );
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (isFullscreen) {
+      setDialogSize(previousDialogSizeRef.current);
+      setIsFullscreen(false);
+      return;
+    }
+
+    previousDialogSizeRef.current = dialogSizeRef.current;
+    setDialogSize({
+      width: Math.max(MIN_WIDTH, window.innerWidth - 32),
+      height: Math.max(MIN_HEIGHT, window.innerHeight - 48),
+    });
+    setIsFullscreen(true);
+  }, [isFullscreen]);
 
   const conversationOptions = useMemo(
     () => conversations.map((item) => ({ value: item.id, label: item.title })),
@@ -760,6 +804,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
     async (
       selectionRect: CaptureRect,
       pushDebug: (line: string) => void,
+      pushPreview?: (label: string, canvas: HTMLCanvasElement) => void,
       onSourceReady?: () => Promise<void> | void,
     ): Promise<{ canvas: HTMLCanvasElement; backend: string; rawPreview?: HTMLCanvasElement; cropPreview?: HTMLCanvasElement } | null> => {
       if (!appService?.isDesktopApp || !isTauriAppPlatform()) return null;
@@ -836,14 +881,22 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             commandGeometry.cropRect.width,
             commandGeometry.cropRect.height,
           );
-          if (!isLowInformationCapture(commandCanvas)) {
+          const commandRawPreview = cropImageSource(commandImage, 0, 0, commandSize.width, commandSize.height);
+          if (!isLowInformationCapture(commandCanvas, 'native')) {
             await notifySourceReady();
             pushDebug(
               `Native capture geometry: source=${commandGeometry.sourceKind}, image=${commandSize.width}x${commandSize.height}, crop=(${commandGeometry.cropRect.left},${commandGeometry.cropRect.top},${commandGeometry.cropRect.width}x${commandGeometry.cropRect.height})`,
             );
-            return { canvas: commandCanvas, backend: 'window-command', cropPreview: commandCanvas };
+            return {
+              canvas: commandCanvas,
+              backend: 'window-command',
+              rawPreview: commandRawPreview,
+              cropPreview: commandCanvas,
+            };
           }
           pushDebug('Native window capture command looked blank, falling back to plugin capture.');
+          pushPreview?.('native-raw-window-command', commandRawPreview);
+          pushPreview?.('native-crop-window-command', commandCanvas);
           screenshotBlob = null;
         }
 
@@ -863,6 +916,8 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             (monitorCandidates.length === 1 ? monitorCandidates[0] : null);
 
           if (matchedMonitor && activeMonitor && windowOuterPosition) {
+            pushDebug('Waiting for UI settle before monitor capture...');
+            await waitForCaptureUiToSettle();
             pushDebug(
               `Trying monitor capture fallback: id=${matchedMonitor.id}, name=${matchedMonitor.name}, monitorPos=(${activeMonitor.position.x},${activeMonitor.position.y})`,
             );
@@ -967,6 +1022,156 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
     },
     [appService],
   );
+
+  const captureMonitorSelection = useCallback(
+    async (
+      payload: CaptureWindowSelectionPayload,
+      pushDebug: (line: string) => void,
+      pushPreview: (label: string, canvas: HTMLCanvasElement) => void,
+    ) => {
+      if (!appService?.isDesktopApp || appService.osPlatform !== 'windows' || !isTauriAppPlatform()) {
+        return null;
+      }
+
+      const [{ monitorFromPoint }, { convertFileSrc }, { getMonitorScreenshot, getScreenshotableMonitors, removeMonitorScreenshot }] =
+        await Promise.all([
+          import('@tauri-apps/api/window'),
+          import('@tauri-apps/api/core'),
+          import('tauri-plugin-screenshots-api'),
+        ]);
+
+      const centerX = payload.monitor
+        ? payload.monitor.position.x + payload.rect.left + payload.rect.width / 2
+        : payload.rect.left + payload.rect.width / 2;
+      const centerY = payload.monitor
+        ? payload.monitor.position.y + payload.rect.top + payload.rect.height / 2
+        : payload.rect.top + payload.rect.height / 2;
+      const activeMonitor =
+        (await monitorFromPoint(centerX, centerY).catch(() => null)) ?? payload.monitor;
+      const monitorCandidates = await getScreenshotableMonitors();
+      const matchedMonitor =
+        monitorCandidates.find((candidate) => candidate.name === activeMonitor?.name) ??
+        (monitorCandidates.length === 1 ? monitorCandidates[0] : null);
+
+      if (!matchedMonitor || !activeMonitor) {
+        pushDebug('capture window monitor target not found');
+        return null;
+      }
+
+      pushDebug(`capture-window monitor target=${matchedMonitor.name}`);
+      const screenshotPath = await getMonitorScreenshot(matchedMonitor.id);
+      try {
+        const screenshotFile = await appService.openFile(screenshotPath, 'None').catch(() => undefined);
+        const screenshotBlob = screenshotFile
+          ? new Blob([await screenshotFile.arrayBuffer()], { type: 'image/png' })
+          : await (await fetch(convertFileSrc(screenshotPath))).blob();
+        const screenshotImage = await loadCanvasImageSource(screenshotBlob);
+        const monitorRect = {
+          left: payload.monitor?.position.x ?? activeMonitor.position.x,
+          top: payload.monitor?.position.y ?? activeMonitor.position.y,
+          width: payload.monitor?.size.width ?? activeMonitor.size.width,
+          height: payload.monitor?.size.height ?? activeMonitor.size.height,
+        };
+        const scale = payload.scaleFactor || 1;
+        const innerPosition = payload.windowInnerPosition ?? payload.windowOuterPosition;
+        const innerSize = payload.windowInnerSize ?? payload.windowOuterSize;
+        const contentLeftOnMonitor =
+          innerPosition?.x != null ? innerPosition.x - monitorRect.left : 0;
+        const contentTopOnMonitor = innerPosition?.y != null ? innerPosition.y - monitorRect.top : 0;
+        const scaleX = innerSize?.width && payload.viewport.width ? innerSize.width / payload.viewport.width : scale;
+        const scaleY = innerSize?.height && payload.viewport.height ? innerSize.height / payload.viewport.height : scale;
+        const localLeft = Math.max(0, Math.round(contentLeftOnMonitor + payload.rect.left * scaleX));
+        const localTop = Math.max(0, Math.round(contentTopOnMonitor + payload.rect.top * scaleY));
+        const localWidth = Math.max(1, Math.round(payload.rect.width * scaleX));
+        const localHeight = Math.max(1, Math.round(payload.rect.height * scaleY));
+        pushDebug(
+          `capture-window geometry: scale=${scale}, innerPos=(${payload.windowInnerPosition?.x ?? 'n/a'},${payload.windowInnerPosition?.y ?? 'n/a'}), innerSize=(${payload.windowInnerSize?.width ?? 'n/a'}x${payload.windowInnerSize?.height ?? 'n/a'}), outerPos=(${payload.windowOuterPosition?.x ?? 'n/a'},${payload.windowOuterPosition?.y ?? 'n/a'}), outerSize=(${payload.windowOuterSize?.width ?? 'n/a'}x${payload.windowOuterSize?.height ?? 'n/a'})`,
+        );
+        pushDebug(
+          `capture-window local rect=(${localLeft},${localTop},${localWidth}x${localHeight}), monitorRect=(${monitorRect.left},${monitorRect.top},${monitorRect.width}x${monitorRect.height}), scaleX=${scaleX.toFixed(3)}, scaleY=${scaleY.toFixed(3)}`,
+        );
+        const rawCanvas = cropImageSource(screenshotImage, 0, 0, monitorRect.width, monitorRect.height);
+        const cropCanvas = cropImageSource(screenshotImage, localLeft, localTop, localWidth, localHeight);
+        pushPreview('capture-window-raw-monitor', rawCanvas);
+        pushPreview('capture-window-crop-monitor', cropCanvas);
+        return cropCanvas;
+      } finally {
+        await removeMonitorScreenshot(matchedMonitor.id).catch(() => undefined);
+      }
+    },
+    [appService],
+  );
+
+  useEffect(() => {
+    if (!isOpen || !appService?.isDesktopApp || appService.osPlatform !== 'windows' || !isTauriAppPlatform()) {
+      return;
+    }
+
+    let unlistenSelection: (() => void) | undefined;
+    let unlistenCancel: (() => void) | undefined;
+
+    const setup = async () => {
+      const currentWindow = getCurrentWindow();
+      unlistenSelection = await currentWindow.listen<CaptureWindowSelectionPayload>(
+        'capture-window-selection',
+        async (event) => {
+          const payload = event.payload;
+          if (!payload) return;
+
+          const debugLines: string[] = [];
+          const debugPreviews: CaptureDebugPreview[] = [];
+          const pushDebug = (line: string) => debugLines.push(line);
+          const pushPreview = (label: string, canvas: HTMLCanvasElement) => {
+            try {
+              debugPreviews.push({ label, dataUrl: canvas.toDataURL('image/png') });
+            } catch {
+              // ignore
+            }
+          };
+
+          try {
+            const canvas = await captureMonitorSelection(payload, pushDebug, pushPreview);
+            if (canvas && !isLowInformationCapture(canvas, 'native')) {
+              pushDebug('capture mode=native-monitor-dedicated');
+              setCaptureDebugInfo(debugLines.join('\n'));
+              setCaptureDebugPreviews(debugPreviews);
+              setAttachments((prev) => [
+                ...prev,
+                {
+                  id: generateId(),
+                  name: `selection-${Date.now()}.png`,
+                  dataUrl: canvas.toDataURL('image/png'),
+                  mediaType: 'image/png',
+                },
+              ]);
+              setError('');
+            } else {
+              setCaptureDebugInfo(debugLines.join('\n'));
+              setCaptureDebugPreviews(debugPreviews);
+              setError(_('Unable to capture screenshot.'));
+            }
+          } catch (error) {
+            setCaptureDebugInfo(`capture window failed: ${(error as Error).message || 'unknown'}`);
+            setCaptureDebugPreviews([]);
+            setError((error as Error).message || _('Unable to capture screenshot.'));
+          } finally {
+            setIsHidingCaptureUi(false);
+          }
+        },
+      );
+
+      unlistenCancel = await currentWindow.listen('capture-window-cancel', async () => {
+        setIsHidingCaptureUi(false);
+      });
+    };
+
+    void setup();
+
+    return () => {
+      unlistenSelection?.();
+      unlistenCancel?.();
+    };
+  }, [_, appService, captureMonitorSelection, isOpen]);
 
   const consumeWarmCapture = useCallback(
     async (selectionRect: CaptureRect, pushDebug: (line: string) => void) => {
@@ -1095,6 +1300,14 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       }
     }
   }, [_, appService]);
+
+  const handleOpenCaptureWindow = useCallback(async () => {
+    flushSync(() => {
+      setIsHidingCaptureUi(true);
+    });
+    await waitForCaptureUiToSettle();
+    await showCaptureWindow(getCurrentWindow().label);
+  }, []);
 
   const handlePaste = useCallback(
     async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -1261,13 +1474,18 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       }
 
       try {
-        const nativeResult = await captureNativeWindowRegion(selectionRect, pushDebug, async () => {
-          flushSync(() => {
-            setIsHidingCaptureUi(false);
-          });
-          await waitForNextPaint();
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        });
+        const nativeResult = await captureNativeWindowRegion(
+          selectionRect,
+          pushDebug,
+          pushPreview,
+          async () => {
+            flushSync(() => {
+              setIsHidingCaptureUi(false);
+            });
+            await waitForNextPaint();
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          },
+        );
         if (nativeResult?.rawPreview) {
           pushPreview(`native-raw-${nativeResult.backend}`, nativeResult.rawPreview);
         }
@@ -1728,9 +1946,10 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
         <div
           className='pointer-events-auto absolute bottom-4 right-4 flex flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-2xl'
           style={{
-            width: `min(96vw, ${dialogSize.width}px)`,
-            height: `min(calc(82vh - 16px), ${dialogSize.height}px)`,
-            bottom: '32px',
+            width: isFullscreen ? 'calc(100vw - 32px)' : `min(96vw, ${dialogSize.width}px)`,
+            height: isFullscreen ? 'calc(100vh - 48px)' : `min(calc(92vh - 16px), ${dialogSize.height}px)`,
+            bottom: isFullscreen ? '16px' : '32px',
+            right: '16px',
             display: isHidingCaptureUi ? 'none' : 'flex',
           }}
           data-ai-capture-hide='true'
@@ -1751,6 +1970,9 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             </button>
             <button className='btn btn-ghost btn-sm' onClick={() => void handleDeleteConversation()}>
               <LuTrash2 className='size-4' />
+            </button>
+            <button className='btn btn-ghost btn-sm' onClick={handleToggleFullscreen}>
+              {isFullscreen ? <LuMinimize2 className='size-4' /> : <LuMaximize2 className='size-4' />}
             </button>
             <button className='btn btn-ghost btn-sm' onClick={onClose}>
               <LuX className='size-4' />
@@ -1917,7 +2139,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             )}
           </div>
 
-          <div className='border-t border-base-300 p-4'>
+          <div className='max-h-[48%] shrink-0 overflow-y-auto border-t border-base-300 p-4'>
             {attachments.length > 0 ? (
               <div className='mb-3 flex gap-3 overflow-x-auto pb-1'>
                 {attachments.map((attachment) => (
@@ -1975,10 +2197,17 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
                 <LuImagePlus className='mr-1 size-4' />
                 {_('Upload Image')}
               </button>
-              <button className='btn btn-outline btn-sm' onClick={() => void handleCaptureScreenshot()}>
-                <LuScreenShare className='mr-1 size-4' />
-                {_('Capture Screen')}
-              </button>
+              {appService?.isDesktopApp && appService.osPlatform === 'windows' ? (
+                <button className='btn btn-outline btn-sm' onClick={() => void handleOpenCaptureWindow()}>
+                  <LuAppWindow className='mr-1 size-4' />
+                  {_('Capture Screen')}
+                </button>
+              ) : (
+                <button className='btn btn-outline btn-sm' onClick={() => void handleCaptureScreenshot()}>
+                  <LuScreenShare className='mr-1 size-4' />
+                  {_('Capture Screen')}
+                </button>
+              )}
               <div className='text-base-content/60 text-xs'>
                 {isTauriAppPlatform()
                   ? _('You can capture the screen or paste an image from the clipboard.')
@@ -1989,27 +2218,29 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             {captureDebugInfo ? (
               <details className='mb-3 rounded-xl border border-base-300 bg-base-200/40 px-3 py-2 text-xs'>
                 <summary className='cursor-pointer select-none font-medium'>{_('Capture Debug')}</summary>
-                <div className='mt-2 flex justify-end'>
-                  <button
-                    type='button'
-                    className='btn btn-ghost btn-xs'
-                    onClick={() => void handleCopyMessage(captureDebugInfo)}
-                  >
-                    <LuCopy className='mr-1 size-3' />
-                    {_('Copy Debug')}
-                  </button>
-                </div>
-                <pre className='mt-2 max-h-40 overflow-auto whitespace-pre-wrap leading-5'>{captureDebugInfo}</pre>
-                {captureDebugPreviews.length > 0 ? (
-                  <div className='mt-3 grid grid-cols-2 gap-3'>
-                    {captureDebugPreviews.map((preview) => (
-                      <div key={preview.label} className='overflow-hidden rounded-lg border border-base-300 bg-base-100'>
-                        <div className='border-b border-base-300 px-2 py-1 text-[11px] font-medium'>{preview.label}</div>
-                        <img src={preview.dataUrl} alt={preview.label} className='max-h-40 w-full object-contain bg-white' />
-                      </div>
-                    ))}
+                <div className='mt-2 max-h-72 overflow-auto pr-1'>
+                  <div className='flex justify-end'>
+                    <button
+                      type='button'
+                      className='btn btn-ghost btn-xs'
+                      onClick={() => void handleCopyMessage(captureDebugInfo)}
+                    >
+                      <LuCopy className='mr-1 size-3' />
+                      {_('Copy Debug')}
+                    </button>
                   </div>
-                ) : null}
+                  <pre className='mt-2 whitespace-pre-wrap leading-5'>{captureDebugInfo}</pre>
+                  {captureDebugPreviews.length > 0 ? (
+                    <div className='mt-3 grid grid-cols-2 gap-3'>
+                      {captureDebugPreviews.map((preview) => (
+                        <div key={preview.label} className='overflow-hidden rounded-lg border border-base-300 bg-base-100'>
+                          <div className='border-b border-base-300 px-2 py-1 text-[11px] font-medium'>{preview.label}</div>
+                          <img src={preview.dataUrl} alt={preview.label} className='max-h-40 w-full object-contain bg-white' />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </details>
             ) : null}
 

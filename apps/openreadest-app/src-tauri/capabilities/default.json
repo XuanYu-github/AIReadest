@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "enables the default permissions",
-  "windows": ["main", "reader-*"],
+  "windows": ["main", "reader-*", "capture-draw"],
   "remote": {
     "urls": ["http://localhost:3000", "http://localhost:3000/*"]
   },
