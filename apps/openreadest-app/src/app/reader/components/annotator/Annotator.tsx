@@ -40,6 +40,7 @@ import useShortcuts from '@/hooks/useShortcuts';
 import ProofreadPopup from './ProofreadPopup';
 import ExportMarkdownDialog from './ExportMarkdownDialog';
 import AskAIDialog from './AskAIDialog';
+import { useAskAIStore } from '@/store/askAIStore';
 
 const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
   const _ = useTranslation();
@@ -69,7 +70,10 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
   const [showWikipediaPopup, setShowWikipediaPopup] = useState(false);
   const [showTranslatorPopup, setShowTranslatorPopup] = useState(false);
   const [showProofreadPopup, setShowProofreadPopup] = useState(false);
-  const [showAskAIDialog, setShowAskAIDialog] = useState(false);
+  const openBookKey = useAskAIStore((state) => state.openBookKey);
+  const openForBook = useAskAIStore((state) => state.openForBook);
+  const closeForBook = useAskAIStore((state) => state.closeForBook);
+  const showAskAIDialog = openBookKey === bookKey;
   const [askAISelectionText, setAskAISelectionText] = useState('');
   const [trianglePosition, setTrianglePosition] = useState<Position>();
   const [annotPopupPosition, setAnnotPopupPosition] = useState<Position>();
@@ -98,8 +102,7 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     showWiktionaryPopup ||
     showWikipediaPopup ||
     showTranslatorPopup ||
-    showProofreadPopup ||
-    showAskAIDialog;
+    showProofreadPopup;
 
   const popupPadding = useResponsiveSize(10);
   const trianglePadding = popupPadding * 2 + 6;
@@ -201,7 +204,6 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
       setShowWikipediaPopup(false);
       setShowTranslatorPopup(false);
       setShowProofreadPopup(false);
-      setShowAskAIDialog(false);
       setEditingAnnotation(null);
     }, 500),
     [],
@@ -429,14 +431,14 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
       setShowWikipediaPopup(false);
       setShowTranslatorPopup(false);
       setShowProofreadPopup(false);
-      setShowAskAIDialog(true);
+      openForBook(bookKey);
     };
 
     eventDispatcher.on('ask-ai-open', handleOpenAskAI);
     return () => {
       eventDispatcher.off('ask-ai-open', handleOpenAskAI);
     };
-  }, [bookKey, selection?.text, settings.aiSettings?.enabled]);
+  }, [bookKey, openForBook, selection?.text, settings.aiSettings?.enabled]);
 
   const handleQuickAction = () => {
     const action = viewSettings.annotationQuickAction;
@@ -748,7 +750,7 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
     }
     setAskAISelectionText(selection.text);
     setShowAnnotPopup(false);
-    setShowAskAIDialog(true);
+    openForBook(bookKey);
   };
 
   const handleStartEditAnnotation = useCallback(() => {
@@ -983,7 +985,7 @@ const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
         bookHash={bookData.book?.hash || bookKey}
         bookTitle={bookData.book?.title || ''}
         selectionText={askAISelectionText}
-        onClose={() => setShowAskAIDialog(false)}
+        onClose={() => closeForBook(bookKey)}
       />
       {editingAnnotation && editingAnnotation.color && selection && (
         <AnnotationRangeEditor

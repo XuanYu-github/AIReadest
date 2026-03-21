@@ -6,5 +6,5 @@
     "urls": ["http://localhost:3000", "http://localhost:3000/*"]
   },
   "platforms": ["linux", "macOS", "windows"],
-  "permissions": ["cli:default"]
+  "permissions": ["cli:default", "screenshots:default"]
 }

@@ -7,12 +7,20 @@ import { BOOK_IDS_SEPARATOR } from '@/services/constants';
 import { AppService } from '@/types/system';
 
 let readerWindowsCount = 0;
+const TAURI_DEV_SERVER_URL = 'http://localhost:3000';
+
+const resolveWindowUrl = (url: string) => {
+  if (typeof window === 'undefined') return url;
+  const isLocalDevServer = window.location.origin.startsWith(TAURI_DEV_SERVER_URL);
+  return isLocalDevServer ? `${TAURI_DEV_SERVER_URL}${url}` : url;
+};
+
 const createReaderWindow = (appService: AppService, url: string) => {
   const currentWindow = getCurrentWindow();
   const label = currentWindow.label;
   const newLabelPrefix = label === 'main' ? 'reader' : label;
   const win = new WebviewWindow(`${newLabelPrefix}-${readerWindowsCount}`, {
-    url,
+    url: resolveWindowUrl(url),
     width: 800,
     height: 600,
     center: true,
@@ -39,6 +47,7 @@ export const showReaderWindow = (appService: AppService, bookIds: string[]) => {
   const ids = bookIds.join(BOOK_IDS_SEPARATOR);
   const params = new URLSearchParams('');
   params.set('ids', ids);
+  params.set('reload', `${Date.now()}`);
   const url = `/reader?${params.toString()}`;
   createReaderWindow(appService, url);
 };

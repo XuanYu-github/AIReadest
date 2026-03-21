@@ -163,6 +163,8 @@ pub fn run() {
             get_environment_variable,
             get_executable_dir,
             dir_scanner::read_dir,
+            #[cfg(target_os = "windows")]
+            windows::capture_current_window_png,
             #[cfg(target_os = "macos")]
             macos::safari_auth::auth_with_safari,
             #[cfg(target_os = "macos")]
@@ -199,6 +201,9 @@ pub fn run() {
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_screenshots::init());
 
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(macos::traffic_light::init());

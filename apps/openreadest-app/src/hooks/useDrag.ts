@@ -24,17 +24,21 @@ export const useDrag = (
   const handleDragStart = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       isDragging.current = true;
+      e.stopPropagation();
+      if ('preventDefault' in e) e.preventDefault();
 
       if ('touches' in e) {
         startY.current = e.touches[0]!.clientY;
         startX.current = e.touches[0]!.clientX;
+        lastX.current = e.touches[0]!.clientX;
+        lastY.current = e.touches[0]!.clientY;
       } else {
         startY.current = e.clientY;
         startX.current = e.clientX;
+        lastX.current = e.clientX;
+        lastY.current = e.clientY;
       }
       startTime.current = performance.now();
-
-      document.body.style.pointerEvents = 'none';
       document.body.style.userSelect = 'none';
       document.documentElement.style.cursor = 'col-resize';
 
@@ -66,7 +70,6 @@ export const useDrag = (
       const handleEnd = (event: MouseEvent | TouchEvent) => {
         isDragging.current = false;
 
-        document.body.style.pointerEvents = '';
         document.body.style.userSelect = '';
         document.documentElement.style.cursor = '';
 
