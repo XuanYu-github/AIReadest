@@ -275,6 +275,11 @@ const waitForNextPaint = async () => {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 };
 
+const waitForCaptureUiToSettle = async () => {
+  await waitForNextPaint();
+  await new Promise<void>((resolve) => setTimeout(resolve, 80));
+};
+
 const isLowInformationCapture = (canvas: HTMLCanvasElement, profile: 'default' | 'native' = 'default') => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return true;
@@ -1082,7 +1087,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
 
     if (appService?.isDesktopApp && appService.osPlatform === 'windows' && isTauriAppPlatform()) {
       try {
-        await waitForNextPaint();
+        await waitForCaptureUiToSettle();
         const { invoke } = await import('@tauri-apps/api/core');
         void invoke('warm_current_window_capture');
       } catch {
@@ -1184,7 +1189,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       };
 
       hideCaptureOverlay();
-      await waitForNextPaint();
+      await waitForCaptureUiToSettle();
 
       const view = getView(bookKey);
       const rendererContents = view?.renderer.getContents() ?? [];
