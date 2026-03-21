@@ -1,9 +1,10 @@
 'use client';
 
 import { flushSync } from 'react-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { emitTo } from '@tauri-apps/api/event';
 import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
+import { useSearchParams } from 'next/navigation';
 import { isTauriAppPlatform } from '@/services/environment';
 
 type SelectionRect = {
@@ -21,13 +22,15 @@ const normalizeRect = (startX: number, startY: number, endX: number, endY: numbe
 });
 
 export default function CapturePage() {
-  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const searchParams = useSearchParams();
   const targetLabel = searchParams.get('target') || 'main';
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'crosshair';
     const handleKeyDown = async (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isTauriAppPlatform()) {
         await emitTo(targetLabel, 'capture-window-cancel', {});
@@ -36,7 +39,11 @@ export default function CapturePage() {
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [targetLabel]);
 
   return (
@@ -103,11 +110,25 @@ export default function CapturePage() {
             width: `${selectionRect.width}px`,
             height: `${selectionRect.height}px`,
           }}
-        />
+        >
+          <div className='absolute bottom-2 right-2 rounded-md bg-black/65 px-2 py-1 text-xs text-white'>
+            {Math.round(selectionRect.width)} x {Math.round(selectionRect.height)}
+          </div>
+        </div>
       ) : null}
       <div className='pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full bg-base-100/90 px-4 py-2 text-sm shadow'>
         Drag to capture an area. Release to finish. Press Esc to cancel.
       </div>
+      <button
+        type='button'
+        className='btn btn-sm btn-outline absolute right-4 top-4'
+        onClick={async () => {
+          await emitTo(targetLabel, 'capture-window-cancel', {});
+          await getCurrentWindow().close().catch(() => undefined);
+        }}
+      >
+        Cancel
+      </button>
     </main>
   );
 }
