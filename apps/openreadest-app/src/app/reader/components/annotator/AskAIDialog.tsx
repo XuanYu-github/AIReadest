@@ -63,6 +63,19 @@ type CaptureSelectionRect = {
   height: number;
 };
 
+type CachedCapturePayload = {
+  backend: string;
+  width: number;
+  height: number;
+  png: number[];
+};
+
+type CachedCaptureInfoPayload = {
+  backend: string;
+  width: number;
+  height: number;
+};
+
 const DEFAULT_SYSTEM_PROMPT =
   'You are a helpful reading assistant. Answer clearly, stay grounded in the selected text and attachments when provided, and say when the context is insufficient.';
 
@@ -262,26 +275,47 @@ const waitForNextPaint = async () => {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 };
 
-const isLowInformationCapture = (canvas: HTMLCanvasElement) => {
+const isLowInformationCapture = (canvas: HTMLCanvasElement, profile: 'default' | 'native' = 'default') => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return true;
-  const sampleWidth = Math.min(64, canvas.width);
-  const sampleHeight = Math.min(64, canvas.height);
-  if (sampleWidth < 2 || sampleHeight < 2) return true;
+  const tileSize = profile === 'native' ? 20 : 16;
+  const sampleTiles = [
+    { x: 0, y: 0 },
+    { x: Math.max(0, Math.floor(canvas.width / 2 - tileSize / 2)), y: 0 },
+    { x: Math.max(0, canvas.width - tileSize), y: 0 },
+    { x: 0, y: Math.max(0, Math.floor(canvas.height / 2 - tileSize / 2)) },
+    {
+      x: Math.max(0, Math.floor(canvas.width / 2 - tileSize / 2)),
+      y: Math.max(0, Math.floor(canvas.height / 2 - tileSize / 2)),
+    },
+    { x: Math.max(0, canvas.width - tileSize), y: Math.max(0, Math.floor(canvas.height / 2 - tileSize / 2)) },
+    { x: 0, y: Math.max(0, canvas.height - tileSize) },
+    { x: Math.max(0, Math.floor(canvas.width / 2 - tileSize / 2)), y: Math.max(0, canvas.height - tileSize) },
+    { x: Math.max(0, canvas.width - tileSize), y: Math.max(0, canvas.height - tileSize) },
+  ];
 
-  const sample = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+  let totalPixels = 0;
   let nonWhite = 0;
   let nonTransparent = 0;
-  for (let i = 0; i < sample.length; i += 4) {
-    const alpha = sample[i + 3] ?? 0;
-    if (alpha > 0) nonTransparent += 1;
-    const r = sample[i] ?? 255;
-    const g = sample[i + 1] ?? 255;
-    const b = sample[i + 2] ?? 255;
-    if (!(r > 245 && g > 245 && b > 245)) nonWhite += 1;
+  for (const tile of sampleTiles) {
+    const sampleWidth = Math.min(tileSize, canvas.width - tile.x);
+    const sampleHeight = Math.min(tileSize, canvas.height - tile.y);
+    if (sampleWidth < 2 || sampleHeight < 2) continue;
+    const sample = ctx.getImageData(tile.x, tile.y, sampleWidth, sampleHeight).data;
+    totalPixels += sampleWidth * sampleHeight;
+    for (let i = 0; i < sample.length; i += 4) {
+      const alpha = sample[i + 3] ?? 0;
+      if (alpha > 0) nonTransparent += 1;
+      const r = sample[i] ?? 255;
+      const g = sample[i + 1] ?? 255;
+      const b = sample[i + 2] ?? 255;
+      if (!(r > 245 && g > 245 && b > 245)) nonWhite += 1;
+    }
   }
-  const total = sampleWidth * sampleHeight;
-  return nonTransparent < total * 0.03 || nonWhite < total * 0.03;
+
+  if (totalPixels < 4) return true;
+  const threshold = profile === 'native' ? 0.005 : 0.03;
+  return nonTransparent < totalPixels * threshold || nonWhite < totalPixels * threshold;
 };
 
 const applyCloneStyleFallbacks = (doc: Document) => {
@@ -459,7 +493,6 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
   } | null>(null);
   const captureStreamRef = useRef<MediaStream | null>(null);
   const captureStartPointRef = useRef<{ x: number; y: number } | null>(null);
-  const skipNativeWindowCommandRef = useRef(false);
 
   const activeStorageKey = `${ASK_AI_LOCAL_CONVERSATION_KEY_PREFIX}-${bookHash}`;
   const dialogTitle = `${_('Ask AI')}${bookTitle ? ` - ${bookTitle}` : ''}`;
@@ -723,7 +756,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       selectionRect: CaptureRect,
       pushDebug: (line: string) => void,
       onSourceReady?: () => Promise<void> | void,
-    ) => {
+    ): Promise<{ canvas: HTMLCanvasElement; backend: string; rawPreview?: HTMLCanvasElement; cropPreview?: HTMLCanvasElement } | null> => {
       if (!appService?.isDesktopApp || !isTauriAppPlatform()) return null;
 
       const [
@@ -768,18 +801,13 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
         let screenshotBlob: Blob | null = null;
 
         try {
-          if (skipNativeWindowCommandRef.current) {
-            pushDebug('Skipping native window capture command because previous attempts looked blank.');
-          } else {
-            pushDebug('Trying native window capture command...');
-            const pngBytes = await invoke<number[]>('capture_current_window_png');
-            if (Array.isArray(pngBytes) && pngBytes.length > 0) {
-              screenshotBlob = new Blob([new Uint8Array(pngBytes)], { type: 'image/png' });
-              pushDebug(`Native window capture command returned ${pngBytes.length} bytes.`);
-            }
+          pushDebug('Trying native window capture command...');
+          const pngBytes = await invoke<number[]>('capture_current_window_png');
+          if (Array.isArray(pngBytes) && pngBytes.length > 0) {
+            screenshotBlob = new Blob([new Uint8Array(pngBytes)], { type: 'image/png' });
+            pushDebug(`Native window capture command returned ${pngBytes.length} bytes.`);
           }
         } catch (error) {
-          skipNativeWindowCommandRef.current = true;
           pushDebug(`Native window capture command unavailable: ${(error as Error).message || 'unknown'}`);
         }
 
@@ -794,6 +822,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             selectionRect,
             windowOuterPosition: windowOuterPosition ? { x: windowOuterPosition.x, y: windowOuterPosition.y } : null,
             windowOuterSize: windowOuterSize ? { width: windowOuterSize.width, height: windowOuterSize.height } : null,
+            assumeClientAreaCapture: true,
           });
           const commandCanvas = cropImageSource(
             commandImage,
@@ -807,9 +836,8 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             pushDebug(
               `Native capture geometry: source=${commandGeometry.sourceKind}, image=${commandSize.width}x${commandSize.height}, crop=(${commandGeometry.cropRect.left},${commandGeometry.cropRect.top},${commandGeometry.cropRect.width}x${commandGeometry.cropRect.height})`,
             );
-            return commandCanvas;
+            return { canvas: commandCanvas, backend: 'window-command', cropPreview: commandCanvas };
           }
-          skipNativeWindowCommandRef.current = true;
           pushDebug('Native window capture command looked blank, falling back to plugin capture.');
           screenshotBlob = null;
         }
@@ -871,7 +899,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
 
         if (!screenshotBlob) {
           pushDebug(`Native screenshot capture path produced ${screenshotPath ? 'file output' : 'no output yet'}.`);
-          if (screenshotPath) {
+          if (screenshotPath && cleanupTarget?.type === 'window') {
             await notifySourceReady();
           }
           try {
@@ -913,13 +941,15 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
           `Native capture geometry: source=${geometry.sourceKind}, image=${screenshotSize.width}x${screenshotSize.height}, crop=(${geometry.cropRect.left},${geometry.cropRect.top},${geometry.cropRect.width}x${geometry.cropRect.height})`,
         );
 
-        return cropImageSource(
+        const cropCanvas = cropImageSource(
           screenshotImage,
           geometry.cropRect.left,
           geometry.cropRect.top,
           geometry.cropRect.width,
           geometry.cropRect.height,
         );
+        const rawPreview = cropImageSource(screenshotImage, 0, 0, screenshotSize.width, screenshotSize.height);
+        return { canvas: cropCanvas, backend: geometry.sourceKind, rawPreview, cropPreview: cropCanvas };
       } finally {
         if (screenshotPath && cleanupTarget) {
           if (cleanupTarget.type === 'window') {
@@ -929,6 +959,82 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
           }
         }
       }
+    },
+    [appService],
+  );
+
+  const consumeWarmCapture = useCallback(
+    async (selectionRect: CaptureRect, pushDebug: (line: string) => void) => {
+      if (!appService?.isDesktopApp || appService.osPlatform !== 'windows' || !isTauriAppPlatform()) {
+        return null;
+      }
+
+      const [{ invoke }, { getCurrentWindow }, { getCurrentWebview }] = await Promise.all([
+        import('@tauri-apps/api/core'),
+        import('@tauri-apps/api/window'),
+        import('@tauri-apps/api/webview'),
+      ]);
+
+      const cachedInfo = await invoke<CachedCaptureInfoPayload | null>('take_cached_current_window_capture_info');
+      if (!cachedInfo || cachedInfo.width <= 0 || cachedInfo.height <= 0) {
+        pushDebug('warm cache miss');
+        return null;
+      }
+
+      pushDebug(`warm cache hit backend=${cachedInfo.backend} size=${cachedInfo.width}x${cachedInfo.height}`);
+      const [currentWindow, currentWebview] = [getCurrentWindow(), getCurrentWebview()];
+      const [webviewSize, webviewPosition, windowOuterSize, windowOuterPosition] = await Promise.all([
+        currentWebview.size(),
+        currentWebview.position(),
+        currentWindow.outerSize().catch(() => null),
+        currentWindow.outerPosition().catch(() => null),
+      ]);
+
+      const geometry = getNativeCaptureGeometry({
+        screenshotSize: { width: cachedInfo.width, height: cachedInfo.height },
+        webviewSize: { width: webviewSize.width, height: webviewSize.height },
+        webviewPosition: { x: webviewPosition.x, y: webviewPosition.y },
+        viewportSize: { width: window.innerWidth, height: window.innerHeight },
+        selectionRect,
+        windowOuterPosition: windowOuterPosition ? { x: windowOuterPosition.x, y: windowOuterPosition.y } : null,
+        windowOuterSize: windowOuterSize ? { width: windowOuterSize.width, height: windowOuterSize.height } : null,
+        assumeClientAreaCapture: true,
+      });
+
+      pushDebug(
+        `warm geometry: source=${geometry.sourceKind}, crop=(${geometry.cropRect.left},${geometry.cropRect.top},${geometry.cropRect.width}x${geometry.cropRect.height})`,
+      );
+      const raw = await invoke<CachedCapturePayload | null>('take_cached_current_window_capture_png');
+      let warmRawPreview: HTMLCanvasElement | undefined;
+      if (raw && Array.isArray(raw.png) && raw.png.length > 0) {
+        const rawBlob = new Blob([new Uint8Array(raw.png)], { type: 'image/png' });
+        const rawImage = await loadCanvasImageSource(rawBlob);
+        const rawCanvas = cropImageSource(rawImage, 0, 0, raw.width, raw.height);
+        warmRawPreview = rawCanvas;
+        pushDebug(`warm raw png bytes=${raw.png.length}`);
+      }
+      const cropped = await invoke<CachedCapturePayload | null>('take_cached_current_window_capture_crop_png', {
+        crop: {
+          left: geometry.cropRect.left,
+          top: geometry.cropRect.top,
+          width: geometry.cropRect.width,
+          height: geometry.cropRect.height,
+        },
+      });
+      void invoke('clear_cached_current_window_capture').catch(() => undefined);
+      flushSync(() => {
+        setIsHidingCaptureUi(false);
+      });
+      await waitForNextPaint();
+      if (!cropped || !Array.isArray(cropped.png) || cropped.png.length === 0) {
+        pushDebug('warm crop miss');
+        return null;
+      }
+      const screenshotBlob = new Blob([new Uint8Array(cropped.png)], { type: 'image/png' });
+      const screenshotImage = await loadCanvasImageSource(screenshotBlob);
+      return Object.assign(cropImageSource(screenshotImage, 0, 0, cropped.width, cropped.height), {
+        __warmRawPreview: warmRawPreview,
+      });
     },
     [appService],
   );
@@ -968,10 +1074,22 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
   const handleCaptureScreenshot = useCallback(async () => {
     setCaptureSelectionRect(null);
     captureStartPointRef.current = null;
-    setIsHidingCaptureUi(true);
-    setIsSelectingCapture(true);
+    flushSync(() => {
+      setIsHidingCaptureUi(true);
+      setIsSelectingCapture(true);
+    });
     setError('');
-  }, [_]);
+
+    if (appService?.isDesktopApp && appService.osPlatform === 'windows' && isTauriAppPlatform()) {
+      try {
+        await waitForNextPaint();
+        const { invoke } = await import('@tauri-apps/api/core');
+        void invoke('warm_current_window_capture');
+      } catch {
+        // ignore warmup failures; regular capture path will still run
+      }
+    }
+  }, [_, appService]);
 
   const handlePaste = useCallback(
     async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -1016,7 +1134,13 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
     setCaptureSelectionRect(null);
     setIsSelectingCapture(false);
     setIsHidingCaptureUi(false);
-  }, []);
+
+    if (appService?.isDesktopApp && appService.osPlatform === 'windows' && isTauriAppPlatform()) {
+      void import('@tauri-apps/api/core')
+        .then(({ invoke }) => invoke('clear_cached_current_window_capture'))
+        .catch(() => undefined);
+    }
+  }, [appService]);
 
   const hideCaptureOverlay = useCallback(() => {
     captureStartPointRef.current = null;
@@ -1060,7 +1184,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       };
 
       hideCaptureOverlay();
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await waitForNextPaint();
 
       const view = getView(bookKey);
       const rendererContents = view?.renderer.getContents() ?? [];
@@ -1098,16 +1222,57 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       );
 
       try {
-        const nativeCanvas = await captureNativeWindowRegion(selectionRect, pushDebug, async () => {
+        const warmCanvas = await consumeWarmCapture(selectionRect, pushDebug);
+        const warmRawPreview = (warmCanvas as (HTMLCanvasElement & { __warmRawPreview?: HTMLCanvasElement }) | null)?.__warmRawPreview;
+        if (warmRawPreview) {
+          pushPreview('warm-native-raw', warmRawPreview);
+        }
+        if (warmCanvas) {
+          pushDebug(`warm lowInfo=${String(isLowInformationCapture(warmCanvas, 'native'))}`);
+        }
+        if (warmCanvas && !isLowInformationCapture(warmCanvas, 'native')) {
+          pushPreview('warm-native-canvas', warmCanvas);
+          pushDebug('capture mode=native-warm');
+          flushSync(() => {
+            setIsHidingCaptureUi(false);
+          });
+          await waitForNextPaint();
+          setCaptureDebugInfo(debugLines.join('\n'));
+          setCaptureDebugPreviews(debugPreviews);
+          setAttachments((prev) => [
+            ...prev,
+            {
+              id: generateId(),
+              name: `selection-${Date.now()}.png`,
+              dataUrl: warmCanvas.toDataURL('image/png'),
+              mediaType: 'image/png',
+            },
+          ]);
+          setError('');
+          return;
+        }
+      } catch (warmError) {
+        pushDebug(`warm capture failed: ${(warmError as Error).message || 'unknown'}`);
+      }
+
+      try {
+        const nativeResult = await captureNativeWindowRegion(selectionRect, pushDebug, async () => {
           flushSync(() => {
             setIsHidingCaptureUi(false);
           });
           await waitForNextPaint();
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
         });
-        if (nativeCanvas && !isLowInformationCapture(nativeCanvas)) {
+        if (nativeResult?.rawPreview) {
+          pushPreview(`native-raw-${nativeResult.backend}`, nativeResult.rawPreview);
+        }
+        if (nativeResult?.cropPreview) {
+          pushPreview(`native-crop-${nativeResult.backend}`, nativeResult.cropPreview);
+        }
+        const nativeCanvas = nativeResult?.canvas ?? null;
+        if (nativeCanvas && !isLowInformationCapture(nativeCanvas, 'native')) {
           pushPreview('native-canvas', nativeCanvas);
-          pushDebug('capture mode=native');
+          pushDebug(`capture mode=native-${nativeResult?.backend || 'unknown'}`);
           setCaptureDebugInfo(debugLines.join('\n'));
           setCaptureDebugPreviews(debugPreviews);
           setAttachments((prev) => [
@@ -1352,7 +1517,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       captureStreamRef.current = null;
       setIsHidingCaptureUi(false);
     }
-  }, [_, bookKey, captureNativeWindowRegion, captureSelectionRect, getView, hideCaptureOverlay, quotedContext, selectionText]);
+  }, [_, bookKey, captureNativeWindowRegion, captureSelectionRect, consumeWarmCapture, getView, hideCaptureOverlay, quotedContext, selectionText]);
 
   const handleSend = useCallback(async () => {
     const question = input.trim();
@@ -1561,7 +1726,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
             width: `min(96vw, ${dialogSize.width}px)`,
             height: `min(calc(82vh - 16px), ${dialogSize.height}px)`,
             bottom: '32px',
-            visibility: isHidingCaptureUi ? 'hidden' : 'visible',
+            display: isHidingCaptureUi ? 'none' : 'flex',
           }}
           data-ai-capture-hide='true'
         >

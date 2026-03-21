@@ -91,6 +91,7 @@ export const getNativeCaptureGeometry = ({
   selectionRect,
   windowOuterPosition,
   windowOuterSize,
+  assumeClientAreaCapture = false,
   tolerance = 4,
 }: {
   screenshotSize: CaptureSize;
@@ -100,6 +101,7 @@ export const getNativeCaptureGeometry = ({
   selectionRect: CaptureRect;
   windowOuterPosition?: CapturePoint | null;
   windowOuterSize?: CaptureSize | null;
+  assumeClientAreaCapture?: boolean;
   tolerance?: number;
 }): NativeCaptureGeometry => {
   const screenshotMatchesWebview =
@@ -114,7 +116,14 @@ export const getNativeCaptureGeometry = ({
   let contentSize: CaptureSize = { ...screenshotSize };
   let sourceKind: 'webview' | 'window' | 'monitor' = 'webview';
 
-  if (!screenshotMatchesWebview && windowOuterPosition && screenshotMatchesOuter) {
+  if (assumeClientAreaCapture || screenshotMatchesWebview) {
+    sourceKind = 'webview';
+    contentOrigin = { x: 0, y: 0 };
+    contentSize = {
+      width: Math.max(1, Math.min(webviewSize.width, screenshotSize.width)),
+      height: Math.max(1, Math.min(webviewSize.height, screenshotSize.height)),
+    };
+  } else if (!screenshotMatchesWebview && windowOuterPosition && screenshotMatchesOuter) {
     sourceKind = 'window';
     contentOrigin = {
       x: clamp(webviewPosition.x - windowOuterPosition.x, 0, screenshotSize.width),

@@ -165,6 +165,16 @@ pub fn run() {
             dir_scanner::read_dir,
             #[cfg(target_os = "windows")]
             windows::capture_current_window_png,
+            #[cfg(target_os = "windows")]
+            windows::warm_current_window_capture,
+            #[cfg(target_os = "windows")]
+            windows::take_cached_current_window_capture_png,
+            #[cfg(target_os = "windows")]
+            windows::take_cached_current_window_capture_info,
+            #[cfg(target_os = "windows")]
+            windows::take_cached_current_window_capture_crop_png,
+            #[cfg(target_os = "windows")]
+            windows::clear_cached_current_window_capture,
             #[cfg(target_os = "macos")]
             macos::safari_auth::auth_with_safari,
             #[cfg(target_os = "macos")]
@@ -302,7 +312,8 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             #[cfg(debug_assertions)]
-            let main_window_url = WebviewUrl::External(Url::parse("http://localhost:3000").unwrap());
+            let main_window_url =
+                WebviewUrl::External(Url::parse("http://localhost:3000").unwrap());
             #[cfg(not(debug_assertions))]
             let main_window_url = WebviewUrl::default();
 
