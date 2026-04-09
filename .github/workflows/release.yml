@@ -198,7 +198,7 @@ jobs:
         run: pnpm install
 
       - name: copy pdfjs-dist and simplecc-dist to public directory
-        run: pnpm --filter ${APP_PACKAGE} setup-vendors
+        run: pnpm --filter "${{ env.APP_PACKAGE }}" setup-vendors
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
