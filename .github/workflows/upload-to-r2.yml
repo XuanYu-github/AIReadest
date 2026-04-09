@@ -21,15 +21,19 @@ jobs:
     strategy:
       fail-fast: false
     env:
-      RELEASE_R2_BUCKET: readest-releases
+      RELEASE_R2_BUCKET: aireadest-releases
       RELEASE_R2_ACCOUNT_ID: ${{ secrets.RELEASE_R2_ACCOUNT_ID }}
       RELEASE_R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_R2_ACCESS_KEY_ID }}
       RELEASE_R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_R2_SECRET_ACCESS_KEY }}
+      RELEASE_REPO: XuanYu-github/AIReadest
+      RELEASE_ASSETS_DIR: ./release-assets
+      RELEASE_DOWNLOAD_BASE_URL: https://github.com/XuanYu-github/AIReadest/releases/download
+      RELEASE_CDN_BASE_URL: https://download.aireadest.com/releases
 
     steps:
       - name: Download release assets
         run: |
-          gh release download "${{ inputs.tag }}" --repo readest/readest --dir ./release-assets
+          gh release download "${{ inputs.tag }}" --repo "$RELEASE_REPO" --dir "$RELEASE_ASSETS_DIR"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -50,16 +54,14 @@ jobs:
 
       - name: Modify latest.json download URLs
         run: |
-          GITHUB_BASE_URL="https://github.com/readest/readest/releases/download"
-          READEST_BASE_URL="https://download.readest.com/releases"
-          sed -i "s#${GITHUB_BASE_URL}#${READEST_BASE_URL}#g" ./release-assets/latest.json
+          sed -i "s#${RELEASE_DOWNLOAD_BASE_URL}#${RELEASE_CDN_BASE_URL}#g" "$RELEASE_ASSETS_DIR/latest.json"
 
       - name: Upload to R2
         run: |
           mkdir releases
-          mv ./release-assets/latest.json releases
-          mv ./release-assets/release-notes.json releases
-          rclone copy ./release-assets r2:${RELEASE_R2_BUCKET}/releases/${{ inputs.tag }}/
+          mv "$RELEASE_ASSETS_DIR/latest.json" releases
+          mv "$RELEASE_ASSETS_DIR/release-notes.json" releases
+          rclone copy "$RELEASE_ASSETS_DIR" r2:${RELEASE_R2_BUCKET}/releases/${{ inputs.tag }}/
           rclone copy ./releases r2:${RELEASE_R2_BUCKET}/releases/
 
       - name: Upload successful

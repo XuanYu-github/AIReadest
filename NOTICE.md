@@ -1,6 +1,6 @@
 # Notice
 
-OpenReadest is an unofficial fork of Readest.
+AIReadest is an unofficial fork of Readest.
 
 Upstream project:
 - Project: Readest
@@ -8,8 +8,8 @@ Upstream project:
 - Original copyright holder: Bilingify LLC and Readest contributors
 
 Fork project:
-- Project: OpenReadest
-- Modifications copyright: luyishui
+- Project: AIReadest
+- Modifications copyright: XuanYu-github
 
 License:
 - This repository is distributed under AGPL-3.0. See LICENSE for the full license text.

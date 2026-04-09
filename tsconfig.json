@@ -13,7 +13,7 @@
   "files": [],
   "references": [
     {
-      "path": "./apps/openreadest-app"
+      "path": "./apps/aireadest-app"
     }
   ]
 }

@@ -1,0 +1,1026 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { RiDeleteBinLine } from 'react-icons/ri';
+
+import * as CFI from 'foliate-js/epubcfi.js';
+import { Overlayer } from 'foliate-js/overlayer.js';
+import { useEnv } from '@/context/EnvContext';
+import { BookNote, BooknoteGroup, HighlightColor, HighlightStyle } from '@/types/book';
+import { NOTE_PREFIX } from '@/types/view';
+import { NativeTouchEventType } from '@/types/system';
+import { getLocale, getOSPlatform, makeSafeFilename, uniqueId } from '@/utils/misc';
+import { useThemeStore } from '@/store/themeStore';
+import { useBookDataStore } from '@/store/bookDataStore';
+import { useSettingsStore } from '@/store/settingsStore';
+import { useReaderStore } from '@/store/readerStore';
+import { useNotebookStore } from '@/store/notebookStore';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useResponsiveSize } from '@/hooks/useResponsiveSize';
+import { useDeviceControlStore } from '@/store/deviceStore';
+import { useFoliateEvents } from '../../hooks/useFoliateEvents';
+import { useNotesSync } from '../../hooks/useNotesSync';
+import { useTextSelector } from '../../hooks/useTextSelector';
+import { Position, TextSelection } from '@/utils/sel';
+import { getPopupPosition, getPosition, getTextFromRange } from '@/utils/sel';
+import { eventDispatcher } from '@/utils/event';
+import { findTocItemBS } from '@/utils/toc';
+import { throttle } from '@/utils/throttle';
+import { runSimpleCC } from '@/utils/simplecc';
+import { getWordCount } from '@/utils/word';
+import { isCfiInLocation } from '@/utils/cfi';
+import { TransformContext } from '@/services/transformers/types';
+import { transformContent } from '@/services/transformService';
+import { getHighlightColorHex } from '../../utils/annotatorUtil';
+import { annotationToolButtons } from './AnnotationTools';
+import AnnotationRangeEditor from './AnnotationRangeEditor';
+import AnnotationPopup from './AnnotationPopup';
+import WiktionaryPopup from './WiktionaryPopup';
+import WikipediaPopup from './WikipediaPopup';
+import TranslatorPopup from './TranslatorPopup';
+import useShortcuts from '@/hooks/useShortcuts';
+import ProofreadPopup from './ProofreadPopup';
+import ExportMarkdownDialog from './ExportMarkdownDialog';
+import AskAIDialog from './AskAIDialog';
+import { useAskAIStore } from '@/store/askAIStore';
+
+const Annotator: React.FC<{ bookKey: string }> = ({ bookKey }) => {
+  const _ = useTranslation();
+  const { envConfig, appService } = useEnv();
+  const { settings } = useSettingsStore();
+  const { isDarkMode } = useThemeStore();
+  const { getConfig, saveConfig, getBookData, updateBooknotes } = useBookDataStore();
+  const { getProgress, getView, getViewsById, getViewSettings } = useReaderStore();
+  const { setNotebookVisible, setNotebookNewAnnotation } = useNotebookStore();
+  const { listenToNativeTouchEvents } = useDeviceControlStore();
+
+  useNotesSync(bookKey);
+
+  const osPlatform = getOSPlatform();
+  const config = getConfig(bookKey)!;
+  const progress = getProgress(bookKey)!;
+  const bookData = getBookData(bookKey)!;
+  const view = getView(bookKey);
+  const viewSettings = getViewSettings(bookKey)!;
+  const primaryLang = bookData.book?.primaryLanguage || 'en';
+
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const [selection, setSelection] = useState<TextSelection | null>(null);
+  const [showAnnotPopup, setShowAnnotPopup] = useState(false);
+  const [showWiktionaryPopup, setShowWiktionaryPopup] = useState(false);
+  const [showWikipediaPopup, setShowWikipediaPopup] = useState(false);
+  const [showTranslatorPopup, setShowTranslatorPopup] = useState(false);
+  const [showProofreadPopup, setShowProofreadPopup] = useState(false);
+  const openBookKey = useAskAIStore((state) => state.openBookKey);
+  const openForBook = useAskAIStore((state) => state.openForBook);
+  const closeForBook = useAskAIStore((state) => state.closeForBook);
+  const showAskAIDialog = openBookKey === bookKey;
+  const [askAISelectionText, setAskAISelectionText] = useState('');
+  const [trianglePosition, setTrianglePosition] = useState<Position>();
+  const [annotPopupPosition, setAnnotPopupPosition] = useState<Position>();
+  const [dictPopupPosition, setDictPopupPosition] = useState<Position>();
+  const [translatorPopupPosition, setTranslatorPopupPosition] = useState<Position>();
+  const [proofreadPopupPosition, setProofreadPopupPosition] = useState<Position>();
+  const [highlightOptionsVisible, setHighlightOptionsVisible] = useState(false);
+  const [showAnnotationNotes, setShowAnnotationNotes] = useState(false);
+  const [annotationNotes, setAnnotationNotes] = useState<BookNote[]>([]);
+  const [editingAnnotation, setEditingAnnotation] = useState<BookNote | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportData, setExportData] = useState<{
+    booknotes: BookNote[];
+    booknoteGroups: { [href: string]: BooknoteGroup };
+  } | null>(null);
+
+  const [selectedStyle, setSelectedStyle] = useState<HighlightStyle>(
+    settings.globalReadSettings.highlightStyle,
+  );
+  const [selectedColor, setSelectedColor] = useState<HighlightColor>(
+    settings.globalReadSettings.highlightStyles[selectedStyle],
+  );
+
+  const showingPopup =
+    showAnnotPopup ||
+    showWiktionaryPopup ||
+    showWikipediaPopup ||
+    showTranslatorPopup ||
+    showProofreadPopup;
+
+  const popupPadding = useResponsiveSize(10);
+  const trianglePadding = popupPadding * 2 + 6;
+  const maxWidth = window.innerWidth - 2 * popupPadding;
+  const maxHeight = window.innerHeight - 2 * popupPadding;
+  const dictPopupWidth = Math.min(480, maxWidth);
+  const dictPopupHeight = Math.min(300, maxHeight);
+  const transPopupWidth = Math.min(480, maxWidth);
+  const transPopupHeight = Math.min(265, maxHeight);
+  const proofreadPopupWidth = Math.min(440, maxWidth);
+  const proofreadPopupHeight = Math.min(200, maxHeight);
+  const annotPopupWidth = Math.min(useResponsiveSize(300), maxWidth);
+  const annotPopupHeight = useResponsiveSize(44);
+  const androidSelectionHandlerHeight = 0;
+
+  // Reposition popups on scroll without dismissing them
+  const repositionPopups = useCallback(() => {
+    if (!selection || !selection.text) return;
+    const gridFrame = document.querySelector(`#gridcell-${bookKey}`);
+    if (!gridFrame) return;
+    const rect = gridFrame.getBoundingClientRect();
+    const triangPos = getPosition(selection, rect, trianglePadding, viewSettings.vertical);
+    const annotPopupPos = getPopupPosition(
+      triangPos,
+      rect,
+      viewSettings.vertical ? annotPopupHeight : annotPopupWidth,
+      viewSettings.vertical ? annotPopupWidth : annotPopupHeight,
+      popupPadding,
+    );
+    if (annotPopupPos.dir === 'down' && osPlatform === 'android') {
+      triangPos.point.y += androidSelectionHandlerHeight;
+      annotPopupPos.point.y += androidSelectionHandlerHeight;
+    }
+    const dictPopupPos = getPopupPosition(
+      triangPos,
+      rect,
+      dictPopupWidth,
+      dictPopupHeight,
+      popupPadding,
+    );
+    const transPopupPos = getPopupPosition(
+      triangPos,
+      rect,
+      transPopupWidth,
+      transPopupHeight,
+      popupPadding,
+    );
+    const proofreadPopupPos = getPopupPosition(
+      triangPos,
+      rect,
+      proofreadPopupWidth,
+      proofreadPopupHeight,
+      popupPadding,
+    );
+    if (triangPos.point.x == 0 || triangPos.point.y == 0) return;
+    setAnnotPopupPosition(annotPopupPos);
+    setDictPopupPosition(dictPopupPos);
+    setTranslatorPopupPosition(transPopupPos);
+    setProofreadPopupPosition(proofreadPopupPos);
+    setTrianglePosition(triangPos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection, bookKey, viewSettings.vertical]);
+
+  useEffect(() => {
+    setSelectedStyle(settings.globalReadSettings.highlightStyle);
+  }, [settings.globalReadSettings.highlightStyle]);
+
+  useEffect(() => {
+    setSelectedColor(settings.globalReadSettings.highlightStyles[selectedStyle]);
+  }, [settings.globalReadSettings.highlightStyles, selectedStyle]);
+
+  const transformCtx: TransformContext = useMemo(
+    () => ({
+      bookKey,
+      viewSettings: getViewSettings(bookKey)!,
+      userLocale: getLocale(),
+      content: '',
+      transformers: ['punctuation'],
+      reversePunctuationTransform: true,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const getAnnotationText = useCallback(
+    async (range: Range) => {
+      transformCtx['content'] = getTextFromRange(range, primaryLang.startsWith('ja') ? ['rt'] : []);
+      return await transformContent(transformCtx);
+    },
+    [primaryLang, transformCtx],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleDismissPopup = useCallback(
+    throttle(() => {
+      setSelection(null);
+      setShowAnnotPopup(false);
+      setShowWiktionaryPopup(false);
+      setShowWikipediaPopup(false);
+      setShowTranslatorPopup(false);
+      setShowProofreadPopup(false);
+      setEditingAnnotation(null);
+    }, 500),
+    [],
+  );
+
+  const {
+    isTextSelected,
+    handleScroll,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerCancel,
+    handlePointerUp,
+    handleSelectionchange,
+    handleShowPopup,
+    handleUpToPopup,
+    handleContextmenu,
+  } = useTextSelector(bookKey, setSelection, getAnnotationText, handleDismissPopup);
+
+  const handleDismissPopupAndSelection = () => {
+    handleDismissPopup();
+    view?.deselect();
+    isTextSelected.current = false;
+  };
+
+  const onLoad = (event: Event) => {
+    const detail = (event as CustomEvent).detail;
+    const { doc, index } = detail;
+
+    const handleTouchmove = (ev: TouchEvent) => {
+      // Available on iOS, on Android not fired
+      // To make the popup not follow the selection while dragging
+      setShowAnnotPopup(false);
+      setEditingAnnotation(null);
+      handleTouchMove(ev);
+    };
+
+    const handleNativeTouch = (event: CustomEvent) => {
+      const ev = event.detail as NativeTouchEventType;
+      if (ev.type === 'touchstart') {
+        handleTouchStart();
+      } else if (ev.type === 'touchend') {
+        handleTouchEnd();
+        handlePointerUp(doc, index);
+      }
+    };
+
+    if (appService?.isAndroidApp) {
+      listenToNativeTouchEvents();
+      eventDispatcher.on('native-touch', handleNativeTouch);
+    }
+
+    // Attach generic selection listeners for all formats, including PDF.
+    // For PDF we only guarantee Copy & Translate; highlight/annotate may be limited by CFI support.
+    view?.renderer?.addEventListener('scroll', handleScroll);
+    // Reposition popups on scroll to keep them in view
+    view?.renderer?.addEventListener('scroll', () => {
+      repositionPopups();
+    });
+    const opts = { passive: false };
+    detail.doc?.addEventListener('touchstart', handleTouchStart, opts);
+    detail.doc?.addEventListener('touchmove', handleTouchmove, opts);
+    detail.doc?.addEventListener('touchend', handleTouchEnd);
+    detail.doc?.addEventListener('pointerdown', handlePointerDown.bind(null, doc, index), opts);
+    detail.doc?.addEventListener('pointermove', handlePointerMove.bind(null, doc, index), opts);
+    detail.doc?.addEventListener('pointercancel', handlePointerCancel.bind(null, doc, index));
+    detail.doc?.addEventListener('pointerup', handlePointerUp.bind(null, doc, index));
+    detail.doc?.addEventListener('selectionchange', handleSelectionchange.bind(null, doc, index));
+
+    // For PDF selections, enable right-click context menu to directly open translator popup.
+    if (bookData.book?.format === 'PDF') {
+      detail.doc?.addEventListener('contextmenu', (e: Event) => {
+        try {
+          const sel = doc.getSelection?.();
+          if (sel && !sel.isCollapsed) {
+            const range = sel.getRangeAt(0);
+            const text = sel.toString();
+            if (text.trim()) {
+              setSelection({ key: bookKey, text, range, index, cfi: view?.getCFI(index, range) });
+              // Show translation popup preferentially for PDF right-click
+              setShowAnnotPopup(false);
+              setShowTranslatorPopup(true);
+              setShowWiktionaryPopup(false);
+              setShowWikipediaPopup(false);
+            }
+          }
+        } catch (err) {
+          console.warn('PDF context menu translation failed:', err);
+        }
+        // Prevent native menu to keep experience consistent
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+    }
+
+    // Disable the default context menu on mobile devices (selection handles suffice)
+    detail.doc?.addEventListener('contextmenu', handleContextmenu);
+  };
+
+  const onDrawAnnotation = (event: Event) => {
+    const viewSettings = getViewSettings(bookKey)!;
+    const isEink = viewSettings.isEink;
+    const detail = (event as CustomEvent).detail;
+    const { draw, annotation, doc, range } = detail;
+    const { style, color } = annotation as BookNote;
+    const hexColor = getHighlightColorHex(settings, color);
+    const einkBgColor = isDarkMode ? '#000000' : '#ffffff';
+    const einkFgColor = isDarkMode ? '#ffffff' : '#000000';
+    if (annotation.note) {
+      const { defaultView } = doc;
+      const node = range.startContainer;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      const { writingMode } = defaultView.getComputedStyle(el);
+      draw(Overlayer.bubble, { writingMode });
+    } else if (style === 'highlight') {
+      draw(Overlayer.highlight, { color: isEink ? einkBgColor : hexColor });
+    } else if (['underline', 'squiggly'].includes(style as string)) {
+      const { defaultView } = doc;
+      const node = range.startContainer;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      const { writingMode, lineHeight, fontSize } = defaultView.getComputedStyle(el);
+      const fontSizeValue = parseFloat(fontSize) || viewSettings.defaultFontSize;
+      const lineHeightValue = parseFloat(lineHeight) || viewSettings.lineHeight * fontSizeValue;
+      const strokeWidth = 2;
+      const verticalCompensation = appService?.isMobile ? 0 : -1;
+      const horizontalCompensation = appService?.isMobile ? -1 : 0;
+      const padding = viewSettings.vertical
+        ? (lineHeightValue - fontSizeValue) / 2 - strokeWidth + verticalCompensation
+        : (lineHeightValue - fontSizeValue) / 2 - strokeWidth + horizontalCompensation;
+      draw(Overlayer[style as keyof typeof Overlayer], {
+        writingMode,
+        color: isEink ? einkFgColor : hexColor,
+        padding,
+      });
+    }
+  };
+
+  const onShowAnnotation = (event: Event) => {
+    const detail = (event as CustomEvent).detail;
+    const { value, index, range } = detail;
+    const { booknotes = [] } = getConfig(bookKey)!;
+    const isNote = value.startsWith(NOTE_PREFIX);
+    const cfi = isNote ? value.replace(NOTE_PREFIX, '') : value;
+    const annotations = booknotes.filter(
+      (booknote) => booknote.type === 'annotation' && !booknote.deletedAt && booknote.cfi === cfi,
+    );
+    const annotation = annotations.find(
+      (annotation) => (!isNote && annotation.style) || (isNote && annotation.note),
+    );
+    if (!annotation) return;
+
+    const { style, color, text, note } = annotation;
+    const selection = {
+      key: bookKey,
+      annotated: true,
+      text: text ?? '',
+      note: note ?? '',
+      rect: isNote ? detail.rect : undefined,
+      cfi,
+      range,
+      index,
+    };
+    if (isNote) {
+      setShowAnnotationNotes(true);
+      setHighlightOptionsVisible(false);
+      setEditingAnnotation(null);
+    } else {
+      setShowAnnotationNotes(false);
+      setAnnotationNotes([]);
+      if (style && color) {
+        setSelectedStyle(style);
+        setSelectedColor(color);
+      }
+      if (style && range) {
+        setEditingAnnotation(annotation);
+      }
+    }
+    setSelection(selection);
+    handleUpToPopup();
+  };
+
+  useFoliateEvents(view, { onLoad, onDrawAnnotation, onShowAnnotation });
+
+  useEffect(() => {
+    handleShowPopup(showingPopup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showingPopup]);
+
+  // When popups are visible, update their positions on scroll events
+  useEffect(() => {
+    const view = getView(bookKey);
+    if (!view?.renderer) return;
+    const onScroll = () => {
+      if (showingPopup) {
+        repositionPopups();
+      }
+    };
+    view.renderer.addEventListener('scroll', onScroll);
+    return () => {
+      view.renderer.removeEventListener('scroll', onScroll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookKey, showingPopup, repositionPopups]);
+
+  useEffect(() => {
+    eventDispatcher.on('export-annotations', handleExportMarkdown);
+    return () => {
+      eventDispatcher.off('export-annotations', handleExportMarkdown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleOpenAskAI = (event: CustomEvent) => {
+      const detail = (event.detail || {}) as { bookKey?: string; selectionText?: string };
+      if (detail.bookKey && detail.bookKey !== bookKey) return;
+      if (!(settings.aiSettings?.enabled ?? false)) return;
+      const nextSelection = detail.selectionText ?? selection?.text ?? '';
+      setAskAISelectionText(nextSelection.trim());
+      setShowAnnotPopup(false);
+      setShowWiktionaryPopup(false);
+      setShowWikipediaPopup(false);
+      setShowTranslatorPopup(false);
+      setShowProofreadPopup(false);
+      openForBook(bookKey);
+    };
+
+    eventDispatcher.on('ask-ai-open', handleOpenAskAI);
+    return () => {
+      eventDispatcher.off('ask-ai-open', handleOpenAskAI);
+    };
+  }, [bookKey, openForBook, selection?.text, settings.aiSettings?.enabled]);
+
+  useEffect(() => {
+    if (!showAskAIDialog) return;
+    const nextSelection = selection?.text?.trim() || '';
+    if (!nextSelection) return;
+    setAskAISelectionText(nextSelection);
+    void eventDispatcher.dispatch('ask-ai-selection-changed', { bookKey, selectionText: nextSelection });
+  }, [selection?.text, showAskAIDialog]);
+
+  const handleQuickAction = () => {
+    const action = viewSettings.annotationQuickAction;
+    switch (action) {
+      case 'copy':
+        handleCopy(false);
+        handleDismissPopupAndSelection();
+        break;
+      case 'highlight':
+        // highlight is already applied in instant annotating
+        handleDismissPopupAndSelection();
+        break;
+      case 'search':
+        handleSearch();
+        break;
+      case 'dictionary':
+        handleDictionary();
+        break;
+      case 'wikipedia':
+        handleWikipedia();
+        break;
+      case 'translate':
+        handleTranslation();
+        break;
+      case 'tts':
+        handleSpeakText(true);
+        break;
+      case 'ask-ai':
+        handleAskAI();
+        break;
+    }
+  };
+
+  useEffect(() => {
+    setHighlightOptionsVisible(!!(selection && selection.annotated));
+    if (selection && selection.text.trim().length > 0) {
+      const gridFrame = document.querySelector(`#gridcell-${bookKey}`);
+      if (!gridFrame) return;
+      const rect = gridFrame.getBoundingClientRect();
+      const triangPos = getPosition(selection, rect, trianglePadding, viewSettings.vertical);
+      const annotPopupPos = getPopupPosition(
+        triangPos,
+        rect,
+        viewSettings.vertical ? annotPopupHeight : annotPopupWidth,
+        viewSettings.vertical ? annotPopupWidth : annotPopupHeight,
+        popupPadding,
+      );
+      if (annotPopupPos.dir === 'down' && osPlatform === 'android') {
+        triangPos.point.y += androidSelectionHandlerHeight;
+        annotPopupPos.point.y += androidSelectionHandlerHeight;
+      }
+      const dictPopupPos = getPopupPosition(
+        triangPos,
+        rect,
+        dictPopupWidth,
+        dictPopupHeight,
+        popupPadding,
+      );
+      const transPopupPos = getPopupPosition(
+        triangPos,
+        rect,
+        transPopupWidth,
+        transPopupHeight,
+        popupPadding,
+      );
+      const proofreadPopupPos = getPopupPosition(
+        triangPos,
+        rect,
+        proofreadPopupWidth,
+        proofreadPopupHeight,
+        popupPadding,
+      );
+      if (triangPos.point.x == 0 || triangPos.point.y == 0) return;
+      setAnnotPopupPosition(annotPopupPos);
+      setDictPopupPosition(dictPopupPos);
+      setTranslatorPopupPosition(transPopupPos);
+      setProofreadPopupPosition(proofreadPopupPos);
+      setTrianglePosition(triangPos);
+
+      const { enableAnnotationQuickActions, annotationQuickAction } = viewSettings;
+      if (enableAnnotationQuickActions && annotationQuickAction && isTextSelected.current) {
+        handleQuickAction();
+      } else {
+        handleShowAnnotPopup();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection, bookKey]);
+
+  useEffect(() => {
+    if (!progress) return;
+    const { location } = progress;
+    const { booknotes = [] } = config;
+    const annotations = booknotes.filter(
+      (item) =>
+        !item.deletedAt &&
+        item.type === 'annotation' &&
+        item.style &&
+        isCfiInLocation(item.cfi, location),
+    );
+    const notes = booknotes.filter(
+      (item) =>
+        !item.deletedAt &&
+        item.type === 'annotation' &&
+        item.note &&
+        item.note.trim().length > 0 &&
+        isCfiInLocation(item.cfi, location),
+    );
+    try {
+      Promise.all(annotations.map((annotation) => view?.addAnnotation(annotation)));
+      Promise.all(
+        notes.map((note) => view?.addAnnotation({ ...note, value: `${NOTE_PREFIX}${note.cfi}` })),
+      );
+    } catch (e) {
+      console.warn(e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress]);
+
+  useEffect(() => {
+    if (!config.booknotes || !selection?.cfi || !showAnnotationNotes) return;
+    const annotations = config.booknotes.filter(
+      (booknote) =>
+        booknote.type === 'annotation' && !booknote.deletedAt && booknote.cfi === selection.cfi,
+    );
+    const notes = annotations.filter((item) => item.note && item.note.trim().length > 0);
+    setAnnotationNotes(notes);
+  }, [selection?.cfi, showAnnotationNotes, config.booknotes]);
+
+  const handleShowAnnotPopup = () => {
+    if (!appService?.isMobile) {
+      containerRef.current?.focus();
+    }
+    setShowAnnotPopup(true);
+    setShowTranslatorPopup(false);
+    setShowWiktionaryPopup(false);
+    setShowWikipediaPopup(false);
+  };
+
+  const handleCopy = (dismissPopup = true) => {
+    if (!selection || !selection.text) return;
+    setTimeout(() => {
+      // Delay to ensure it won't be overridden by system clipboard actions
+      navigator.clipboard?.writeText(selection.text);
+    }, 100);
+    if (dismissPopup) {
+      handleDismissPopupAndSelection();
+    }
+
+    if (!viewSettings?.copyToNotebook) return;
+
+    eventDispatcher.dispatch('toast', {
+      type: 'info',
+      message: _('Copied to notebook'),
+      className: 'whitespace-nowrap',
+      timeout: 2000,
+    });
+
+    const { booknotes: annotations = [] } = config;
+    const cfi = view?.getCFI(selection.index, selection.range);
+    if (!cfi) return;
+    const annotation: BookNote = {
+      id: uniqueId(),
+      type: 'excerpt',
+      cfi,
+      text: selection.text,
+      note: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const existingIndex = annotations.findIndex(
+      (annotation) =>
+        annotation.cfi === cfi && annotation.type === 'excerpt' && !annotation.deletedAt,
+    );
+    if (existingIndex !== -1) {
+      annotations[existingIndex] = annotation;
+    } else {
+      annotations.push(annotation);
+    }
+    const updatedConfig = updateBooknotes(bookKey, annotations);
+    if (updatedConfig) {
+      saveConfig(envConfig, bookKey, updatedConfig, settings);
+    }
+    if (!appService?.isMobile) {
+      setNotebookVisible(true);
+    }
+  };
+
+  const handleHighlight = (update = false, highlightStyle?: HighlightStyle) => {
+    if (!selection || !selection.text) return;
+    setHighlightOptionsVisible(true);
+    const { booknotes: annotations = [] } = config;
+    const cfi = view?.getCFI(selection.index, selection.range);
+    if (!cfi) return;
+    const style = highlightStyle || settings.globalReadSettings.highlightStyle;
+    const color = settings.globalReadSettings.highlightStyles[style];
+    const annotation: BookNote = {
+      id: uniqueId(),
+      type: 'annotation',
+      cfi,
+      style,
+      color,
+      text: selection.text,
+      note: '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const existingIndex = annotations.findIndex(
+      (annotation) =>
+        annotation.cfi === cfi &&
+        annotation.type === 'annotation' &&
+        annotation.style &&
+        !annotation.deletedAt,
+    );
+    const views = getViewsById(bookKey.split('-')[0]!);
+    if (existingIndex !== -1) {
+      views.forEach((view) => view?.addAnnotation(annotation, true));
+      if (update) {
+        annotation.id = annotations[existingIndex]!.id;
+        annotations[existingIndex] = annotation;
+        views.forEach((view) => view?.addAnnotation(annotation));
+      } else {
+        annotations[existingIndex]!.deletedAt = Date.now();
+        handleDismissPopup();
+      }
+    } else {
+      annotations.push(annotation);
+      views.forEach((view) => view?.addAnnotation(annotation));
+      setSelection({ ...selection, cfi, annotated: true });
+    }
+
+    const updatedConfig = updateBooknotes(bookKey, annotations);
+    if (updatedConfig) {
+      saveConfig(envConfig, bookKey, updatedConfig, settings);
+    }
+  };
+
+  const handleAnnotate = () => {
+    if (!selection || !selection.text) return;
+    const { sectionHref: href } = progress;
+    selection.href = href;
+    handleHighlight(true);
+    setNotebookVisible(true);
+    setNotebookNewAnnotation(selection);
+    handleDismissPopup();
+  };
+
+  const handleSearch = () => {
+    if (!selection || !selection.text) return;
+    handleDismissPopupAndSelection();
+
+    let term = selection.text;
+    const convertChineseVariant = viewSettings.convertChineseVariant;
+    if (convertChineseVariant && convertChineseVariant !== 'none') {
+      term = runSimpleCC(term, convertChineseVariant, true);
+    }
+    eventDispatcher.dispatch('search-term', { term, bookKey });
+  };
+
+  const handleDictionary = () => {
+    if (!selection || !selection.text) return;
+    setShowAnnotPopup(false);
+    setShowWiktionaryPopup(true);
+  };
+
+  const handleWikipedia = () => {
+    if (!selection || !selection.text) return;
+    setShowAnnotPopup(false);
+    setShowWikipediaPopup(true);
+  };
+
+  const handleTranslation = () => {
+    if (!selection || !selection.text) return;
+    setShowAnnotPopup(false);
+    setShowTranslatorPopup(true);
+  };
+
+  const handleSpeakText = async (oneTime = false) => {
+    if (!selection || !selection.text) return;
+    setShowAnnotPopup(false);
+    eventDispatcher.dispatch('tts-speak', { bookKey, range: selection.range, oneTime });
+  };
+
+  const handleProofread = () => {
+    if (!selection || !selection.text) return;
+    setShowAnnotPopup(false);
+    setShowProofreadPopup(true);
+
+    if (getWordCount(selection.text) > 30) {
+      eventDispatcher.dispatch('toast', {
+        type: 'warning',
+        message: _('Word limit of 30 words exceeded.'),
+        timeout: 3000,
+      });
+      return;
+    }
+  };
+
+  const handleAskAI = () => {
+    if (!selection || !selection.text) return;
+    if (!(settings.aiSettings?.enabled ?? false)) {
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('Enable Ask AI in Settings first.'),
+        timeout: 2000,
+      });
+      return;
+    }
+    setAskAISelectionText(selection.text);
+    setShowAnnotPopup(false);
+    openForBook(bookKey);
+  };
+
+  const handleStartEditAnnotation = useCallback(() => {
+    setShowAnnotPopup(false);
+  }, []);
+
+  // Keyboard shortcuts: trigger actions only if there's an active selection and popup hidden
+  useShortcuts(
+    {
+      onHighlightSelection: () => {
+        handleHighlight(false, 'highlight');
+      },
+      onUnderlineSelection: () => {
+        handleHighlight(false, 'underline');
+      },
+      onAnnotateSelection: () => {
+        handleAnnotate();
+      },
+      onSearchSelection: () => {
+        handleSearch();
+      },
+      onCopySelection: () => {
+        handleCopy(false);
+      },
+      onTranslateSelection: () => {
+        handleTranslation();
+      },
+      onDictionarySelection: () => {
+        handleDictionary();
+      },
+      onWikipediaSelection: () => {
+        handleWikipedia();
+      },
+      onReadAloudSelection: () => {
+        handleSpeakText();
+      },
+      onProofreadSelection: () => {
+        handleProofread();
+      },
+    },
+    [selection?.text],
+  );
+
+  const handleExportMarkdown = async (event: CustomEvent) => {
+    const { bookKey: exportBookKey } = event.detail;
+    if (bookKey !== exportBookKey) return;
+
+    const { bookDoc, book } = bookData;
+    if (!bookDoc || !book || !bookDoc.toc) return;
+
+    const config = getConfig(bookKey)!;
+    const { booknotes: allNotes = [] } = config;
+    const booknotes = allNotes.filter((note) => !note.deletedAt);
+    if (booknotes.length === 0) {
+      eventDispatcher.dispatch('toast', {
+        type: 'info',
+        message: _('No annotations to export'),
+        className: 'whitespace-nowrap',
+        timeout: 2000,
+      });
+      return;
+    }
+
+    // Organize booknotes into groups by chapter
+    const booknoteGroups: { [href: string]: BooknoteGroup } = {};
+    for (const booknote of booknotes) {
+      const tocItem = findTocItemBS(bookDoc.toc ?? [], booknote.cfi);
+      const href = tocItem?.href || '';
+      const label = tocItem?.label || '';
+      const id = tocItem?.id || 0;
+      if (!booknoteGroups[href]) {
+        booknoteGroups[href] = { id, href, label, booknotes: [] };
+      }
+      booknoteGroups[href].booknotes.push(booknote);
+    }
+
+    Object.values(booknoteGroups).forEach((group) => {
+      group.booknotes.sort((a, b) => {
+        return CFI.compare(a.cfi, b.cfi);
+      });
+    });
+
+    setExportData({ booknotes, booknoteGroups });
+    setShowExportDialog(true);
+  };
+
+  const handleConfirmExport = async (markdownContent: string) => {
+    const { book } = bookData;
+    if (!book) return;
+
+    setTimeout(() => {
+      // Delay to ensure it won't be overridden by system clipboard actions
+      navigator.clipboard?.writeText(markdownContent);
+    }, 100);
+
+    const filename = `${makeSafeFilename(book.title)}.md`;
+    const saved = await appService?.saveFile(filename, markdownContent, 'text/markdown');
+    eventDispatcher.dispatch('toast', {
+      type: 'info',
+      message: saved ? _('Exported successfully') : _('Copied to clipboard'),
+      timeout: 2000,
+    });
+
+    setShowExportDialog(false);
+    setExportData(null);
+  };
+
+  const handleCancelExport = () => {
+    setShowExportDialog(false);
+    setExportData(null);
+  };
+
+  const selectionAnnotated = selection?.annotated;
+  const toolButtons = annotationToolButtons.map(({ type, label, Icon }) => {
+    switch (type) {
+      case 'copy':
+        return { tooltipText: _(label), Icon, onClick: handleCopy };
+      case 'highlight':
+        return {
+          tooltipText: selectionAnnotated ? _('Delete Highlight') : _(label),
+          Icon: selectionAnnotated ? RiDeleteBinLine : Icon,
+          onClick: handleHighlight,
+          disabled: bookData.book?.format === 'PDF',
+        };
+      case 'annotate':
+        return {
+          tooltipText: _(label),
+          Icon,
+          onClick: handleAnnotate,
+          disabled: bookData.book?.format === 'PDF',
+        };
+      case 'search':
+        return {
+          tooltipText: _(label),
+          Icon,
+          onClick: handleSearch,
+          disabled: bookData.book?.format === 'PDF',
+        };
+      case 'dictionary':
+        return { tooltipText: _(label), Icon, onClick: handleDictionary };
+      case 'wikipedia':
+        return { tooltipText: _(label), Icon, onClick: handleWikipedia };
+      case 'translate':
+        return { tooltipText: _(label), Icon, onClick: handleTranslation };
+      case 'tts':
+        return {
+          tooltipText: _(label),
+          Icon,
+          onClick: handleSpeakText,
+          disabled: bookData.book?.format === 'PDF',
+        };
+      case 'ask-ai':
+        return { tooltipText: _(label), Icon, onClick: handleAskAI };
+      case 'proofread':
+        return {
+          tooltipText: _(label),
+          Icon,
+          onClick: handleProofread,
+          disabled: bookData.book?.format !== 'EPUB',
+        };
+      default:
+        return { tooltipText: '', Icon, onClick: () => {} };
+    }
+  });
+
+  return (
+    <div ref={containerRef} role='toolbar' tabIndex={-1}>
+      {showWiktionaryPopup && trianglePosition && dictPopupPosition && (
+        <WiktionaryPopup
+          word={selection?.text as string}
+          lang={bookData.bookDoc?.metadata.language as string}
+          position={dictPopupPosition}
+          trianglePosition={trianglePosition}
+          popupWidth={dictPopupWidth}
+          popupHeight={dictPopupHeight}
+          onDismiss={handleDismissPopupAndSelection}
+        />
+      )}
+      {showWikipediaPopup && trianglePosition && dictPopupPosition && (
+        <WikipediaPopup
+          text={selection?.text as string}
+          lang={bookData.bookDoc?.metadata.language as string}
+          position={dictPopupPosition}
+          trianglePosition={trianglePosition}
+          popupWidth={dictPopupWidth}
+          popupHeight={dictPopupHeight}
+          onDismiss={handleDismissPopupAndSelection}
+        />
+      )}
+      {showTranslatorPopup && trianglePosition && translatorPopupPosition && (
+        <TranslatorPopup
+          text={selection?.text as string}
+          position={translatorPopupPosition}
+          trianglePosition={trianglePosition}
+          popupWidth={transPopupWidth}
+          popupHeight={transPopupHeight}
+          onDismiss={handleDismissPopupAndSelection}
+        />
+      )}
+      {showAnnotPopup && trianglePosition && annotPopupPosition && (
+        <AnnotationPopup
+          bookKey={bookKey}
+          dir={viewSettings.rtl ? 'rtl' : 'ltr'}
+          isVertical={viewSettings.vertical}
+          buttons={toolButtons}
+          notes={annotationNotes}
+          position={annotPopupPosition}
+          trianglePosition={trianglePosition}
+          highlightOptionsVisible={highlightOptionsVisible}
+          selectedStyle={selectedStyle}
+          selectedColor={selectedColor}
+          popupWidth={annotPopupWidth}
+          popupHeight={annotPopupHeight}
+          onHighlight={handleHighlight}
+          onDismiss={handleDismissPopupAndSelection}
+        />
+      )}
+      {showProofreadPopup && trianglePosition && proofreadPopupPosition && selection && (
+        <ProofreadPopup
+          bookKey={bookKey}
+          selection={selection}
+          position={proofreadPopupPosition}
+          trianglePosition={trianglePosition}
+          popupWidth={proofreadPopupWidth}
+          popupHeight={proofreadPopupHeight}
+          onDismiss={handleDismissPopupAndSelection}
+        />
+      )}
+      <AskAIDialog
+        isOpen={showAskAIDialog}
+        bookKey={bookKey}
+        bookHash={bookData.book?.hash || bookKey}
+        bookTitle={bookData.book?.title || ''}
+        selectionText={askAISelectionText}
+        onClose={() => closeForBook(bookKey)}
+      />
+      {editingAnnotation && editingAnnotation.color && selection && (
+        <AnnotationRangeEditor
+          bookKey={bookKey}
+          isVertical={viewSettings.vertical}
+          annotation={editingAnnotation}
+          selection={selection}
+          handleColor={selectedColor}
+          getAnnotationText={getAnnotationText}
+          setSelection={setSelection}
+          onStartEdit={handleStartEditAnnotation}
+        />
+      )}
+      {showExportDialog && exportData && bookData.book && (
+        <ExportMarkdownDialog
+          bookKey={bookKey}
+          isOpen={showExportDialog}
+          bookTitle={bookData.book.title}
+          bookAuthor={bookData.book.author || ''}
+          booknotes={exportData.booknotes}
+          booknoteGroups={exportData.booknoteGroups}
+          onCancel={handleCancelExport}
+          onExport={handleConfirmExport}
+        />
+      )}
+    </div>
+  );
+};
+
+export default Annotator;

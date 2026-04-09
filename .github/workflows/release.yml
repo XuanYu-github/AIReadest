@@ -1,9 +1,22 @@
-name: Release OpenReadest
+name: Release AIReadest
 
 on:
   workflow_dispatch:
   release:
     types: [published]
+
+env:
+  APP_DIR: apps/aireadest-app
+  APP_PACKAGE: '@aireadest/app'
+  RELEASE_REPO: XuanYu-github/AIReadest
+  RELEASE_DOWNLOAD_BASE_URL: https://github.com/XuanYu-github/AIReadest/releases/download
+  RELEASE_LATEST_JSON_URL: https://github.com/XuanYu-github/AIReadest/releases/latest/download/latest.json
+  ARTIFACT_PREFIX: AIReadest
+  APP_EXE_NAME: aireadest.exe
+  KO_PLUGIN_PARENT_DIR: apps
+  KO_PLUGIN_DIRNAME: aireadest.koplugin
+  KO_PLUGIN_META_FILE: apps/aireadest.koplugin/_meta.lua
+  ANDROID_ICON_SOURCE: ../../data/icons/readest-book.png
 
 jobs:
   get-release:
@@ -21,7 +34,9 @@ jobs:
       - name: setup node
         uses: actions/setup-node@v6
       - name: get version
-        run: echo "PACKAGE_VERSION=$(node -p "require('./apps/openreadest-app/package.json').version")" >> $GITHUB_ENV
+        run: |
+          package_version=$(node -e "console.log(require('./${APP_DIR}/package.json').version)")
+          echo "PACKAGE_VERSION=${package_version}" >> "$GITHUB_ENV"
       - name: get release
         id: get-release
         uses: actions/github-script@v8
@@ -39,8 +54,9 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const version = require('./apps/openreadest-app/package.json').version;
-            const releaseNotesFileContent = fs.readFileSync('./apps/openreadest-app/release-notes.json', 'utf8');
+            const appDir = '${{ env.APP_DIR }}';
+            const version = require(`./${appDir}/package.json`).version;
+            const releaseNotesFileContent = fs.readFileSync(`./${appDir}/release-notes.json`, 'utf8');
             const releaseNotes = JSON.parse(releaseNotesFileContent).releases[version] || {};
             const notes = releaseNotes.notes || [];
             const releaseNote = notes.map((note, index) => `${index + 1}. ${note}`).join(' ');
@@ -94,16 +110,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version=${{ needs.get-release.outputs.release_version }}
-          plugin_zip="Readest-${version}-1.koplugin.zip"
-          meta_file="apps/readest.koplugin/_meta.lua"
+          plugin_zip="${ARTIFACT_PREFIX}-${version}-1.koplugin.zip"
+          meta_file="$KO_PLUGIN_META_FILE"
           perl -i -pe "s/^}/    version = \"${version}\",\n}/" "${meta_file}"
 
-          cd apps
-          zip -r ../${plugin_zip} readest.koplugin
+          cd "$KO_PLUGIN_PARENT_DIR"
+          zip -r ../${plugin_zip} "$KO_PLUGIN_DIRNAME"
           cd ..
 
           echo "Uploading ${plugin_zip} to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} ${plugin_zip} --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "${plugin_zip}" --repo "$RELEASE_REPO" --clobber
 
   build-tauri:
     needs: get-release
@@ -180,7 +196,7 @@ jobs:
         run: pnpm install
 
       - name: copy pdfjs-dist and simplecc-dist to public directory
-        run: pnpm --filter @openreadest/app setup-vendors
+        run: pnpm --filter ${APP_PACKAGE} setup-vendors
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -211,7 +227,7 @@ jobs:
       - name: create .env.local file for Next.js
         run: |
           echo "NEXT_PUBLIC_APP_PLATFORM=tauri" >> .env.local
-          cp .env.local apps/openreadest-app/.env.local
+          cp .env.local "$APP_DIR"/.env.local
 
       - name: build and upload Android apks
         if: matrix.config.release == 'android'
@@ -220,11 +236,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          cd apps/openreadest-app/
+          cd "$APP_DIR"
           export NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
           rm -rf src-tauri/gen/android
           pnpm tauri android init
-          pnpm tauri icon ../../data/icons/readest-book.png
+          pnpm tauri icon "$ANDROID_ICON_SOURCE"
           git checkout .
 
           pushd src-tauri/gen/android
@@ -236,37 +252,39 @@ jobs:
           popd
           version=${{ needs.get-release.outputs.release_version }}
           apk_path=src-tauri/gen/android/app/build/outputs/apk/universal/release
-          universial_apk=Readest_${version}_universal.apk
-          arm64_apk=Readest_${version}_arm64.apk
+          universial_apk=${ARTIFACT_PREFIX}_${version}_universal.apk
+          arm64_apk=${ARTIFACT_PREFIX}_${version}_arm64.apk
           pnpm tauri android build
           cp ${apk_path}/app-universal-release.apk $universial_apk
           pnpm tauri android build -t aarch64
           cp ${apk_path}/app-universal-release.apk $arm64_apk
 
           echo "Uploading $universial_apk to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} $universial_apk --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$universial_apk" --repo "$RELEASE_REPO" --clobber
           echo "Uploading $arm64_apk to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} $arm64_apk --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$arm64_apk" --repo "$RELEASE_REPO" --clobber
           echo "Uploading signatures to GitHub release"
           pnpm tauri signer sign $universial_apk
           pnpm tauri signer sign $arm64_apk
-          gh release upload ${{ needs.get-release.outputs.release_tag }} $universial_apk.sig --clobber
-          gh release upload ${{ needs.get-release.outputs.release_tag }} $arm64_apk.sig --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$universial_apk.sig" --repo "$RELEASE_REPO" --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$arm64_apk.sig" --repo "$RELEASE_REPO" --clobber
 
       - name: download and update latest.json for Android release
         if: matrix.config.release == 'android'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd apps/openreadest-app/
-          curl -sL https://github.com/readest/readest/releases/latest/download/latest.json -o latest.json
+          cd "$APP_DIR"
+          curl -sL "$RELEASE_LATEST_JSON_URL" -o latest.json
 
           version=${{ needs.get-release.outputs.release_version }}
-          universial_apk_url="https://github.com/readest/readest/releases/download/${{ needs.get-release.outputs.release_tag }}/Readest_${version}_universal.apk"
-          arm64_apk_url="https://github.com/readest/readest/releases/download/${{ needs.get-release.outputs.release_tag }}/Readest_${version}_arm64.apk"
+          universial_apk="${ARTIFACT_PREFIX}_${version}_universal.apk"
+          arm64_apk="${ARTIFACT_PREFIX}_${version}_arm64.apk"
+          universial_apk_url="${RELEASE_DOWNLOAD_BASE_URL}/${{ needs.get-release.outputs.release_tag }}/${universial_apk}"
+          arm64_apk_url="${RELEASE_DOWNLOAD_BASE_URL}/${{ needs.get-release.outputs.release_tag }}/${arm64_apk}"
 
-          universial_sig=$(cat Readest_${version}_universal.apk.sig)
-          arm64_sig=$(cat Readest_${version}_arm64.apk.sig)
+          universial_sig=$(cat "${universial_apk}.sig")
+          arm64_sig=$(cat "${arm64_apk}.sig")
 
           jq --arg url "$universial_apk_url" \
               --arg sig "$universial_sig" \
@@ -277,7 +295,7 @@ jobs:
               '.platforms["android-arm64"] = {signature: $sig, url: $url}' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
 
           echo "Uploading updated latest.json to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --repo "$RELEASE_REPO" --clobber
 
       - name: Override tauri-cli with custom AppImage format (Linux)
         if: matrix.config.release == 'linux'
@@ -298,7 +316,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NODE_OPTIONS: '--max-old-space-size=8192'
         with:
-          projectPath: apps/openreadest-app
+          projectPath: ${{ env.APP_DIR }}
           releaseId: ${{ needs.get-release.outputs.release_id }}
           releaseBody: ${{ needs.get-release.outputs.release_note }}
           args: ${{ matrix.config.args || '' }}
@@ -308,7 +326,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Uploading release notes to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} apps/openreadest-app/release-notes.json --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$APP_DIR/release-notes.json" --repo "$RELEASE_REPO" --clobber
 
       - name: build and upload portable binaries (Windows only)
         if: matrix.config.os == 'windows-latest'
@@ -319,7 +337,7 @@ jobs:
         shell: bash
         run: |
           echo "Building Portable Binaries"
-          pushd apps/openreadest-app/
+          pushd "$APP_DIR"
           echo "NEXT_PUBLIC_PORTABLE_APP=true" >> .env.local
           pnpm tauri build ${{ matrix.config.args }}
 
@@ -329,29 +347,29 @@ jobs:
           version=${{ needs.get-release.outputs.release_version }}
 
           if [ "$arch" = "x86_64" ]; then
-            bin_file="Readest_${version}_x64-portable.exe"
+            bin_file="${ARTIFACT_PREFIX}_${version}_x64-portable.exe"
           elif [ "$arch" = "aarch64" ]; then
-            bin_file="Readest_${version}_arm64-portable.exe"
+            bin_file="${ARTIFACT_PREFIX}_${version}_arm64-portable.exe"
           else
             echo "Unknown architecture: $arch"
             exit 1
           fi
 
-          exe_file="target/${{ matrix.config.rust_target }}/release/readest.exe"
+          exe_file="target/${{ matrix.config.rust_target }}/release/${APP_EXE_NAME}"
           # Browsers on Windows won't download zip files that contain exe files
           # so upload the exe files instead. This is totally stupid.
           # powershell.exe -Command "Compress-Archive -Path $exe_file -DestinationPath $bin_file -Force"
           cp $exe_file $bin_file
 
           echo "Uploading $bin_file to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} $bin_file --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$bin_file" --repo "$RELEASE_REPO" --clobber
 
           echo "Signing portable binary"
-          pushd apps/openreadest-app/
+          pushd "$APP_DIR"
           pnpm tauri signer sign "../../$bin_file"
           popd
           echo "Uploading signature to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} $bin_file.sig --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "$bin_file.sig" --repo "$RELEASE_REPO" --clobber
 
       - name: download and update latest.json for Windows portable release
         if: matrix.config.os == 'windows-latest'
@@ -359,23 +377,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          curl -sL https://github.com/readest/readest/releases/latest/download/latest.json -o latest.json
+          curl -sL "$RELEASE_LATEST_JSON_URL" -o latest.json
 
           version=${{ needs.get-release.outputs.release_version }}
           arch=${{ matrix.config.arch }}
 
           if [ "$arch" = "x86_64" ]; then
-            bin_file="Readest_${version}_x64-portable.exe"
+            bin_file="${ARTIFACT_PREFIX}_${version}_x64-portable.exe"
             platform_key="windows-x86_64-portable"
           elif [ "$arch" = "aarch64" ]; then
-            bin_file="Readest_${version}_arm64-portable.exe"
+            bin_file="${ARTIFACT_PREFIX}_${version}_arm64-portable.exe"
             platform_key="windows-aarch64-portable"
           else
             echo "Unknown architecture: $arch"
             exit 1
           fi
 
-          portable_url="https://github.com/readest/readest/releases/download/${{ needs.get-release.outputs.release_tag }}/$bin_file"
+          portable_url="${RELEASE_DOWNLOAD_BASE_URL}/${{ needs.get-release.outputs.release_tag }}/$bin_file"
           portable_sig=$(cat $bin_file.sig)
 
           jq --arg url "$portable_url" \
@@ -384,7 +402,7 @@ jobs:
               '.platforms[$key] = {signature: $sig, url: $url}' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
 
           echo "Uploading updated latest.json to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --repo "$RELEASE_REPO" --clobber
 
   upload-to-r2:
     needs: [get-release, build-tauri]

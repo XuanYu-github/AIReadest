@@ -1,0 +1,20 @@
+name = "aireadest-web"
+main = ".open-next/worker.js"
+compatibility_date = "2025-11-17"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = false
+head_sampling_rate = 0
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[kv_namespaces]]
+binding = "TRANSLATIONS_KV"
+id = "${TRANSLATIONS_KV_ID}"
+
+[[r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "aireadest-next-inc-cache"

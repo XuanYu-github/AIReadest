@@ -2,7 +2,7 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "rust-analyzer.linkedProjects": [
     "packages/tauri/Cargo.toml",
-    "apps/openreadest-app/src-tauri/Cargo.toml"
+    "apps/aireadest-app/src-tauri/Cargo.toml"
   ],
   // "editor.formatOnSave": true, // uncomment to add format on save
   "typescript.inlayHints.parameterNames.enabled": "all",
