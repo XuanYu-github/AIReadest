@@ -67,7 +67,8 @@ export const createMockAppService = () => {
       await writeFile(path, base, text);
     },
     putBinary: async (base: BaseDir, path: string, bytes: Uint8Array) => {
-      await writeFile(path, base, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      await writeFile(path, base, buffer as ArrayBuffer);
     },
     getText: async (base: BaseDir, path: string) => {
       return (await readFile(path, base, 'text')) as string;
@@ -77,4 +78,3 @@ export const createMockAppService = () => {
     },
   };
 };
-

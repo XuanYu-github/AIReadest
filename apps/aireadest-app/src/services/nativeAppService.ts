@@ -585,12 +585,13 @@ export class NativeAppService extends BaseAppService {
     const hasNextSettings = await this.fs.exists(nextSettingsPath, 'None');
     const hasNextLibrary = await this.fs.exists(nextLibraryPath, 'None');
 
-    let bestLegacy: { root: string; data: string; files: Awaited<ReturnType<typeof this.readDirectory>> } | null = null;
+    type LegacyCandidateWithFiles = { root: string; data: string; files: FileItem[] };
+    let bestLegacy: LegacyCandidateWithFiles | null = null;
     for (const candidate of legacyCandidates) {
       if (!(await this.fs.exists(candidate.data, 'None'))) {
         continue;
       }
-      const files = await this.readDirectory(candidate.data, 'None').catch(() => []);
+      const files = await this.readDirectory(candidate.data, 'None').catch((): FileItem[] => []);
       if (files.length === 0) {
         continue;
       }
@@ -627,15 +628,22 @@ export class NativeAppService extends BaseAppService {
       }
     }
 
-    const nextFiles = await this.readDirectory(nextDataDir, 'None').catch(() => []);
-    const migratedAll = bestLegacy.files.every((file) => nextFiles.some((nextFile) => nextFile.path === file.path && nextFile.size === file.size));
+    const nextFiles = await this.readDirectory(nextDataDir, 'None').catch((): FileItem[] => []);
+    const migratedAll = bestLegacy.files.every((file: FileItem) =>
+      nextFiles.some((nextFile) => nextFile.path === file.path && nextFile.size === file.size),
+    );
 
     if (migratedAll && bestLegacy.root === rootDir) {
       await this.deleteDir(bestLegacy.data, 'None', true).catch(() => undefined);
     }
 
     if (migrated) {
-      await this.writeFile(migrationMarker, 'None', new TextEncoder().encode(bestLegacy.root).buffer).catch(() => undefined);
+      const markerBytes = new TextEncoder().encode(bestLegacy.root);
+      const markerBuffer = markerBytes.buffer.slice(
+        markerBytes.byteOffset,
+        markerBytes.byteOffset + markerBytes.byteLength,
+      ) as ArrayBuffer;
+      await this.writeFile(migrationMarker, 'None', markerBuffer).catch(() => undefined);
     }
   }
 }

@@ -21,7 +21,6 @@ export class WebDavClient {
   private serverUrl: string;
   private rootPath: string;
   private username?: string;
-  private password?: string;
   private decodedPassword?: string;
   private allowInsecureTls: boolean;
   private defaultTimeoutMs: number;
@@ -39,7 +38,6 @@ export class WebDavClient {
     this.serverUrl = serverUrl;
     this.rootPath = normalizeRootPath(options.rootPath);
     this.username = options.username;
-    this.password = options.password;
     this.decodedPassword = options.password ? decodeMaybeBase64Password(options.password) : options.password;
     this.allowInsecureTls = !!options.allowInsecureTls;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30000;

@@ -122,7 +122,7 @@ export const createMockWebDavServer = async (options: {
       const range = req.headers['range'];
       if (typeof range === 'string' && range.startsWith('bytes=')) {
         const [startStr, endStr] = range.slice('bytes='.length).split('-');
-        const start = Number.parseInt(startStr, 10);
+        const start = Number.parseInt(startStr || '0', 10);
         const end = endStr ? Number.parseInt(endStr, 10) : entry.data.length - 1;
         const clampedStart = Number.isFinite(start) ? Math.max(0, start) : 0;
         const clampedEnd = Number.isFinite(end) ? Math.min(entry.data.length - 1, end) : entry.data.length - 1;
@@ -152,8 +152,6 @@ export const createMockWebDavServer = async (options: {
         res.end();
         return;
       }
-      const hrefBase = basePrefix ? `${basePrefix}${normalized}` : normalized;
-      const selfHref = hrefBase === '' ? '/' : hrefBase;
       const hrefs: string[] = [];
       if (entry.type === 'dir') {
         const dirPath = normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
@@ -188,4 +186,3 @@ export const createMockWebDavServer = async (options: {
     },
   };
 };
-

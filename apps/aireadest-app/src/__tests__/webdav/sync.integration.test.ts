@@ -145,7 +145,7 @@ describe('WebDAV sync integration', () => {
     });
 
     expect(result.conflicts.length).toBe(1);
-    expect(result.conflicts[0].path).toContain('Books/hash3/config.json');
+    expect(result.conflicts[0]?.path).toContain('Books/hash3/config.json');
     expect(await getText('Books', 'hash3/config.json')).toContain('0.3');
   });
 });

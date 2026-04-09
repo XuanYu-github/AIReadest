@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
-  LuArrowUp,
   LuAppWindow,
   LuChevronDown,
   LuChevronUp,
@@ -12,7 +11,6 @@ import {
   LuMessageSquarePlus,
   LuMinimize2,
   LuPencil,
-  LuPlus,
   LuScreenShare,
   LuSendHorizontal,
   LuSplit,
@@ -160,34 +158,6 @@ const normalizeSelectionRect = (
   width: Math.abs(endX - startX),
   height: Math.abs(endY - startY),
 });
-
-const cropScreenshotToSelection = async (file: File, rect: CaptureSelectionRect) => {
-  const dataUrl = await fileToDataUrl(file);
-  const image = await loadImageElement(dataUrl);
-  const scaleX = image.width / Math.max(1, window.innerWidth);
-  const scaleY = image.height / Math.max(1, window.innerHeight);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(rect.width * scaleX));
-  canvas.height = Math.max(1, Math.round(rect.height * scaleY));
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Failed to create screenshot canvas');
-  context.drawImage(
-    image,
-    Math.round(rect.left * scaleX),
-    Math.round(rect.top * scaleY),
-    Math.round(rect.width * scaleX),
-    Math.round(rect.height * scaleY),
-    0,
-    0,
-    canvas.width,
-    canvas.height,
-  );
-  return await new Promise<string>((resolve, reject) => {
-    const nextDataUrl = canvas.toDataURL('image/png');
-    if (!nextDataUrl) reject(new Error('Failed to crop screenshot image'));
-    else resolve(nextDataUrl);
-  });
-};
 
 const drawSourceRegion = (
   ctx: CanvasRenderingContext2D,
@@ -524,41 +494,6 @@ const applyCloneStyleFallbacks = (doc: Document) => {
   doc.body.style.background = '#ffffff';
 };
 
-const captureStreamFrame = async (stream: MediaStream): Promise<File> => {
-  const video = document.createElement('video');
-  video.srcObject = stream;
-  video.muted = true;
-  video.playsInline = true;
-
-  await new Promise<void>((resolve, reject) => {
-    video.onloadedmetadata = () => resolve();
-    video.onerror = () => reject(new Error('Failed to read captured screen stream'));
-  });
-
-  await video.play();
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth || window.innerWidth;
-  canvas.height = video.videoHeight || window.innerHeight;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Failed to create screenshot canvas');
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((value) => {
-      if (value) resolve(value);
-      else reject(new Error('Failed to create screenshot image'));
-    }, 'image/png');
-  });
-
-  stream.getTracks().forEach((track) => track.stop());
-  video.srcObject = null;
-  return new File([blob], `screenshot-${Date.now()}.png`, { type: 'image/png' });
-};
-
 const toStoredAttachments = (items: Attachment[]): AIMessageAttachment[] =>
   items.map((item) => ({
     name: item.name,
@@ -618,21 +553,6 @@ const buildCurrentUserMessage = (
     return { role: 'user', content: parts[0].text };
   }
   return { role: 'user', content: parts };
-};
-
-type CaptureWindowSelectionPayload = {
-  rect: CaptureRect;
-  viewport: { width: number; height: number };
-  scaleFactor?: number;
-  windowOuterPosition?: { x: number; y: number } | null;
-  windowOuterSize?: { width: number; height: number } | null;
-  windowInnerPosition?: { x: number; y: number } | null;
-  windowInnerSize?: { width: number; height: number } | null;
-  monitor: {
-    name?: string | null;
-    position: { x: number; y: number };
-    size: { width: number; height: number };
-  } | null;
 };
 
 type CaptureWindowResultPayload = {
@@ -1436,85 +1356,6 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
     [appService],
   );
 
-  const captureMonitorSelection = useCallback(
-    async (
-      payload: CaptureWindowSelectionPayload,
-      pushDebug: (line: string) => void,
-      pushPreview: (label: string, canvas: HTMLCanvasElement) => void,
-    ) => {
-      if (!appService?.isDesktopApp || appService.osPlatform !== 'windows' || !isTauriAppPlatform()) {
-        return null;
-      }
-
-      const [{ monitorFromPoint }, { convertFileSrc }, { getMonitorScreenshot, getScreenshotableMonitors, removeMonitorScreenshot }] =
-        await Promise.all([
-          import('@tauri-apps/api/window'),
-          import('@tauri-apps/api/core'),
-          import('tauri-plugin-screenshots-api'),
-        ]);
-
-      const centerX = payload.monitor
-        ? payload.monitor.position.x + payload.rect.left + payload.rect.width / 2
-        : payload.rect.left + payload.rect.width / 2;
-      const centerY = payload.monitor
-        ? payload.monitor.position.y + payload.rect.top + payload.rect.height / 2
-        : payload.rect.top + payload.rect.height / 2;
-      const activeMonitor =
-        (await monitorFromPoint(centerX, centerY).catch(() => null)) ?? payload.monitor;
-      const monitorCandidates = await getScreenshotableMonitors();
-      const matchedMonitor =
-        monitorCandidates.find((candidate) => candidate.name === activeMonitor?.name) ??
-        (monitorCandidates.length === 1 ? monitorCandidates[0] : null);
-
-      if (!matchedMonitor || !activeMonitor) {
-        pushDebug('capture window monitor target not found');
-        return null;
-      }
-
-      pushDebug(`capture-window monitor target=${matchedMonitor.name}`);
-      const screenshotPath = await getMonitorScreenshot(matchedMonitor.id);
-      try {
-        const screenshotFile = await appService.openFile(screenshotPath, 'None').catch(() => undefined);
-        const screenshotBlob = screenshotFile
-          ? new Blob([await screenshotFile.arrayBuffer()], { type: 'image/png' })
-          : await (await fetch(convertFileSrc(screenshotPath))).blob();
-        const screenshotImage = await loadCanvasImageSource(screenshotBlob);
-        const monitorRect = {
-          left: payload.monitor?.position.x ?? activeMonitor.position.x,
-          top: payload.monitor?.position.y ?? activeMonitor.position.y,
-          width: payload.monitor?.size.width ?? activeMonitor.size.width,
-          height: payload.monitor?.size.height ?? activeMonitor.size.height,
-        };
-        const scale = payload.scaleFactor || 1;
-        const innerPosition = payload.windowInnerPosition ?? payload.windowOuterPosition;
-        const innerSize = payload.windowInnerSize ?? payload.windowOuterSize;
-        const contentLeftOnMonitor =
-          innerPosition?.x != null ? innerPosition.x - monitorRect.left : 0;
-        const contentTopOnMonitor = innerPosition?.y != null ? innerPosition.y - monitorRect.top : 0;
-        const scaleX = innerSize?.width && payload.viewport.width ? innerSize.width / payload.viewport.width : scale;
-        const scaleY = innerSize?.height && payload.viewport.height ? innerSize.height / payload.viewport.height : scale;
-        const localLeft = Math.max(0, Math.round(contentLeftOnMonitor + payload.rect.left * scaleX));
-        const localTop = Math.max(0, Math.round(contentTopOnMonitor + payload.rect.top * scaleY));
-        const localWidth = Math.max(1, Math.round(payload.rect.width * scaleX));
-        const localHeight = Math.max(1, Math.round(payload.rect.height * scaleY));
-        pushDebug(
-          `capture-window geometry: scale=${scale}, innerPos=(${payload.windowInnerPosition?.x ?? 'n/a'},${payload.windowInnerPosition?.y ?? 'n/a'}), innerSize=(${payload.windowInnerSize?.width ?? 'n/a'}x${payload.windowInnerSize?.height ?? 'n/a'}), outerPos=(${payload.windowOuterPosition?.x ?? 'n/a'},${payload.windowOuterPosition?.y ?? 'n/a'}), outerSize=(${payload.windowOuterSize?.width ?? 'n/a'}x${payload.windowOuterSize?.height ?? 'n/a'})`,
-        );
-        pushDebug(
-          `capture-window local rect=(${localLeft},${localTop},${localWidth}x${localHeight}), monitorRect=(${monitorRect.left},${monitorRect.top},${monitorRect.width}x${monitorRect.height}), scaleX=${scaleX.toFixed(3)}, scaleY=${scaleY.toFixed(3)}`,
-        );
-        const rawCanvas = cropImageSource(screenshotImage, 0, 0, monitorRect.width, monitorRect.height);
-        const cropCanvas = cropImageSource(screenshotImage, localLeft, localTop, localWidth, localHeight);
-        pushPreview('capture-window-raw-monitor', rawCanvas);
-        pushPreview('capture-window-crop-monitor', cropCanvas);
-        return cropCanvas;
-      } finally {
-        await removeMonitorScreenshot(matchedMonitor.id).catch(() => undefined);
-      }
-    },
-    [appService],
-  );
-
   const cleanupCaptureWindowSource = useCallback(async () => {
     captureWindowSessionRef.current += 1;
     captureWindowSourcePromiseRef.current = null;
@@ -1632,6 +1473,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       };
       return {
         kind: 'file',
+        path: screenshotPath,
         height: monitor.size.height,
         mode: 'file',
         src: convertFileSrc(screenshotPath),
@@ -2222,12 +2064,12 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
           ? `capture host rect=(${Math.round(captureHostRect.left)},${Math.round(captureHostRect.top)},${Math.round(captureHostRect.width)}x${Math.round(captureHostRect.height)})`
           : 'capture host missing',
       );
-      const frames: ReaderFrameCaptureInfo[] = rendererContents
-        .map(({ doc, index }) => {
-          const iframe = doc.defaultView?.frameElement;
-          if (!iframe) return null;
-          const frameRect = iframe.getBoundingClientRect();
-          return {
+      const frames: ReaderFrameCaptureInfo[] = rendererContents.flatMap(({ doc, index }) => {
+        const iframe = doc.defaultView?.frameElement;
+        if (!iframe) return [];
+        const frameRect = iframe.getBoundingClientRect();
+        return [
+          {
             iframe,
             doc,
             index: index ?? null,
@@ -2237,9 +2079,9 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
               width: frameRect.width,
               height: frameRect.height,
             },
-          } satisfies ReaderFrameCaptureInfo;
-        })
-        .filter((frame): frame is ReaderFrameCaptureInfo => !!frame);
+          } satisfies ReaderFrameCaptureInfo,
+        ];
+      });
       pushDebug(`capture frames: ${frames.length}`);
 
       const selectionRect: CaptureRect = rect;
@@ -2323,7 +2165,7 @@ const AskAIDialog: React.FC<AskAIDialogProps> = ({
       }
 
       const rankedFrames = rankFramesForCapture(frames, selectionRect, {
-        primaryIndex: view?.renderer?.primaryIndex ?? null,
+        primaryIndex: view?.renderer?.page ?? null,
       });
       pushDebug(`ranked frames: ${rankedFrames.length}`);
 

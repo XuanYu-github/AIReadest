@@ -227,9 +227,9 @@ jobs:
           echo 'CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc' >> $GITHUB_ENV
 
       - name: create .env.local file for Next.js
+        shell: bash
         run: |
-          echo "NEXT_PUBLIC_APP_PLATFORM=tauri" >> .env.local
-          cp .env.local "$APP_DIR"/.env.local
+          echo "NEXT_PUBLIC_APP_PLATFORM=tauri" > "$APP_DIR/.env.local"
 
       - name: build and upload Android apks
         if: matrix.config.release == 'android'

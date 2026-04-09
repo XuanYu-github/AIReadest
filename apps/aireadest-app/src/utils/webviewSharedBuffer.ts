@@ -21,7 +21,7 @@ export const getWebViewSharedBuffer = (transferType: string): Promise<ArrayBuffe
     }
 
     const handler = (event: { getBuffer: () => ArrayBuffer; additionalData?: Record<string, unknown> }) => {
-      if (event.additionalData?.transfer_type !== transferType) {
+      if (event.additionalData?.['transfer_type'] !== transferType) {
         return;
       }
 

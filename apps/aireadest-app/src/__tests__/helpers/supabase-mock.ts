@@ -17,22 +17,15 @@ export const setupSupabaseMocks = async (
   },
 ) => {
   const { supabase, createSupabaseAdminClient } = await import('@/utils/supabase');
+  type GetUserResponse = Awaited<ReturnType<typeof supabase.auth.getUser>>;
 
-  vi.mocked(supabase.auth.getUser).mockResolvedValue(
-    customResponses.getUser || {
-      data: {
-        user: {
-          id: 'test-user-123',
-          email: 'test@example.com',
-          app_metadata: {},
-          user_metadata: {},
-          aud: 'test-aud',
-          created_at: new Date().toISOString(),
-        },
-      },
+  const getUserResponse: GetUserResponse =
+    (customResponses.getUser as GetUserResponse | null) ?? {
+      data: { user: null },
       error: null,
-    },
-  );
+    };
+
+  vi.mocked(supabase.auth.getUser).mockResolvedValue(getUserResponse);
 
   vi.mocked(supabase.from).mockReturnValue({
     select: vi.fn(() => ({

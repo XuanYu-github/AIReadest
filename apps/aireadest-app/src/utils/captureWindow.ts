@@ -9,6 +9,16 @@ let captureWindowTargetLabel: string | null = null;
 let captureWindowPendingTargetLabel: string | null = null;
 let captureWindowPromise: Promise<WebviewWindow> | null = null;
 
+type CaptureWindowLike = {
+  label: string;
+  setPosition: (position: PhysicalPosition) => Promise<unknown>;
+  setSize: (size: PhysicalSize) => Promise<unknown>;
+  show: () => Promise<unknown>;
+  hide: () => Promise<unknown>;
+  setFocus: () => Promise<unknown>;
+  close: () => Promise<unknown>;
+};
+
 type ShowCaptureWindowOptions = {
   visible?: boolean;
 };
@@ -39,11 +49,11 @@ const resolveWindowUrl = (url: string) => {
   return isLocalDevServer ? `${TAURI_DEV_SERVER_URL}${url}` : url;
 };
 
-const getCaptureWindow = async () => {
+const getCaptureWindow = async (): Promise<CaptureWindowLike | null> => {
   return (await getAllWindows()).find((win) => win.label === CAPTURE_WINDOW_LABEL) ?? null;
 };
 
-const setCaptureWindowBounds = async (win: WebviewWindow) => {
+const setCaptureWindowBounds = async (win: CaptureWindowLike) => {
   const monitor = await currentMonitor().catch(() => null);
   if (!monitor) return;
 

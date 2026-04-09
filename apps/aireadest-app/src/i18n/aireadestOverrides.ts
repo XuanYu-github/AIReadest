@@ -130,8 +130,6 @@ const EXPLICIT_OVERRIDES: Record<string, Record<string, string>> = {
       'AIReadest is an independent project based on Readest and OpenReadest.',
     'Author: XuanYu-github. Based on Readest and OpenReadest.':
       'Author: XuanYu-github. Based on Readest and OpenReadest.',
-    'Author: XuanYu-github. Based on Readest and OpenReadest.':
-      'Author: XuanYu-github. Based on Readest and OpenReadest.',
     'Get Help from the Readest Community': 'Get Help from the AIReadest Community',
     'Need help? Contact our support team at support@readest.com':
       'Need help? Please open an issue in the AIReadest repository.',
@@ -263,8 +261,6 @@ const EXPLICIT_OVERRIDES: Record<string, Record<string, string>> = {
       'AIReadest 是基于 Readest 和 OpenReadest 的独立项目。',
     'Author: XuanYu-github. Based on Readest and OpenReadest.':
       '作者：XuanYu-github。项目基于 Readest 和 OpenReadest 开发。',
-    'Author: XuanYu-github. Based on Readest and OpenReadest.':
-      '作者：XuanYu-github。项目基于 Readest 和 OpenReadest 开发。',
     'Get Help from the Readest Community': '从 AIReadest 社区获取帮助',
     'Need help? Contact our support team at support@readest.com':
       '需要帮助？请前往 AIReadest 仓库提交 issue。',
@@ -394,8 +390,6 @@ const EXPLICIT_OVERRIDES: Record<string, Record<string, string>> = {
       'AIReadest 是基於 Readest 和 OpenReadest 的獨立專案。',
     'AIReadest is an independent project evolved from Readest.':
       'AIReadest 是基於 Readest 和 OpenReadest 的獨立專案。',
-    'Author: XuanYu-github. Based on Readest and OpenReadest.':
-      '作者：XuanYu-github。此專案基於 Readest 和 OpenReadest 開發。',
     'Author: XuanYu-github. Based on Readest and OpenReadest.':
       '作者：XuanYu-github。此專案基於 Readest 和 OpenReadest 開發。',
     'Get Help from the Readest Community': '從 AIReadest 社群獲取幫助',

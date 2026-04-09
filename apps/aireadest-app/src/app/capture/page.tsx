@@ -277,7 +277,7 @@ const measureWrappedText = (text: string, maxWidth: number, fontSize: number) =>
 
 export default function CapturePage() {
   const searchParams = useSearchParams();
-  const targetLabel = searchParams.get('target') || 'main';
+  const targetLabel = searchParams?.get('target') || 'main';
   const [imageSrc, setImageSrc] = useState('');
   const [sourceMode, setSourceMode] = useState<'file' | 'shared-buffer'>('file');
   const [captureStage, setCaptureStage] = useState<'select' | 'annotate'>('select');
@@ -707,7 +707,7 @@ export default function CapturePage() {
 
   useEffect(() => {
     const html = document.documentElement;
-    const previousPage = html.dataset.page;
+    const previousPage = html.dataset['page'];
     const previousHtmlOverflow = html.style.overflow;
     const previousBodyMargin = document.body.style.margin;
     const previousBodyOverflow = document.body.style.overflow;
@@ -721,7 +721,7 @@ export default function CapturePage() {
     document.body.style.width = '100vw';
     document.body.style.height = '100vh';
     document.body.style.borderRadius = '0';
-    html.dataset.page = 'capture';
+    html.dataset['page'] = 'capture';
     html.style.overflow = 'hidden';
     void emitTo(targetLabel, 'capture-window-page-ready', {});
     const handleKeyDown = async (event: KeyboardEvent) => {
@@ -781,9 +781,9 @@ export default function CapturePage() {
       document.body.style.borderRadius = previousBodyBorderRadius;
       html.style.overflow = previousHtmlOverflow;
       if (previousPage) {
-        html.dataset.page = previousPage;
+        html.dataset['page'] = previousPage;
       } else {
-        delete html.dataset.page;
+        delete html.dataset['page'];
       }
       unlistenSourceReady?.();
       window.removeEventListener('keydown', handleKeyDown);
