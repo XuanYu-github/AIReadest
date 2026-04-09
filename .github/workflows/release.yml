@@ -163,6 +163,8 @@ jobs:
 
     runs-on: ${{ matrix.config.os }}
     timeout-minutes: 60
+    env:
+      HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -304,7 +306,7 @@ jobs:
         run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage --force
 
       - uses: tauri-apps/tauri-action@v0
-        if: matrix.config.release != 'android'
+        if: matrix.config.release != 'android' && (matrix.config.release != 'macos' || env.HAS_APPLE_CERTIFICATE == 'true')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: 'true'
@@ -324,11 +326,13 @@ jobs:
           args: ${{ matrix.config.args || '' }}
 
       - name: upload release notes to GitHub release
+        if: matrix.config.release == 'linux' && matrix.config.arch == 'x86_64'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           echo "Uploading release notes to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} "$APP_DIR/release-notes.json" --repo "$RELEASE_REPO" --clobber
+          gh release upload ${{ needs.get-release.outputs.release_tag }} "${{ env.APP_DIR }}/release-notes.json" --repo "$RELEASE_REPO" --clobber
 
       - name: build and upload portable binaries (Windows only)
         if: matrix.config.os == 'windows-latest'

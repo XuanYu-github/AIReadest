@@ -55,7 +55,6 @@ tauri-plugin-native-bridge = { path = "./plugins/tauri-plugin-native-bridge" }
 tauri-plugin-native-tts = { path = "./plugins/tauri-plugin-native-tts" }
 tauri-plugin-websocket = "2"
 tauri-plugin-sharekit = "0.3"
-tauri-plugin-screenshots = "2.2.0"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 rand = "0.8"
@@ -72,6 +71,7 @@ objc2-foundation = { version = "0.3", features = ["NSError", "NSArray"] }
 tauri-plugin-cli = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
+tauri-plugin-screenshots = "2.2.0"
 
 [target."cfg(target_os = \"windows\")".dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
