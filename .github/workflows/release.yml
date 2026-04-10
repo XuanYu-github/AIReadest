@@ -275,34 +275,6 @@ jobs:
           gh release upload ${{ needs.get-release.outputs.release_tag }} "$universial_apk.sig" --repo "$RELEASE_REPO" --clobber
           gh release upload ${{ needs.get-release.outputs.release_tag }} "$arm64_apk.sig" --repo "$RELEASE_REPO" --clobber
 
-      - name: download and update latest.json for Android release
-        if: matrix.config.release == 'android'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cd "$APP_DIR"
-          curl -sL "$RELEASE_LATEST_JSON_URL" -o latest.json
-
-          version=${{ needs.get-release.outputs.release_version }}
-          universial_apk="${ARTIFACT_PREFIX}_${version}_universal.apk"
-          arm64_apk="${ARTIFACT_PREFIX}_${version}_arm64.apk"
-          universial_apk_url="${RELEASE_DOWNLOAD_BASE_URL}/${{ needs.get-release.outputs.release_tag }}/${universial_apk}"
-          arm64_apk_url="${RELEASE_DOWNLOAD_BASE_URL}/${{ needs.get-release.outputs.release_tag }}/${arm64_apk}"
-
-          universial_sig=$(cat "${universial_apk}.sig")
-          arm64_sig=$(cat "${arm64_apk}.sig")
-
-          jq --arg url "$universial_apk_url" \
-              --arg sig "$universial_sig" \
-              '.platforms["android-universal"] = {signature: $sig, url: $url}' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
-
-          jq --arg url "$arm64_apk_url" \
-              --arg sig "$arm64_sig" \
-              '.platforms["android-arm64"] = {signature: $sig, url: $url}' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
-
-          echo "Uploading updated latest.json to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --repo "$RELEASE_REPO" --clobber
-
       - name: Override tauri-cli with custom AppImage format (Linux)
         if: matrix.config.release == 'linux'
         run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage --force
@@ -327,6 +299,7 @@ jobs:
           projectPath: ${{ env.APP_DIR }}
           releaseId: ${{ needs.get-release.outputs.release_id }}
           releaseBody: ${{ needs.get-release.outputs.release_note }}
+          includeUpdaterJson: false
           args: ${{ matrix.config.args || '' }}
 
       - name: upload release notes to GitHub release
@@ -382,39 +355,6 @@ jobs:
           popd
           echo "Uploading signature to GitHub release"
           gh release upload ${{ needs.get-release.outputs.release_tag }} "$bin_file.sig" --repo "$RELEASE_REPO" --clobber
-
-      - name: download and update latest.json for Windows portable release
-        if: matrix.config.os == 'windows-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          curl -sL "$RELEASE_LATEST_JSON_URL" -o latest.json
-
-          version=${{ needs.get-release.outputs.release_version }}
-          arch=${{ matrix.config.arch }}
-
-          if [ "$arch" = "x86_64" ]; then
-            bin_file="${ARTIFACT_PREFIX}_${version}_x64-portable.exe"
-            platform_key="windows-x86_64-portable"
-          elif [ "$arch" = "aarch64" ]; then
-            bin_file="${ARTIFACT_PREFIX}_${version}_arm64-portable.exe"
-            platform_key="windows-aarch64-portable"
-          else
-            echo "Unknown architecture: $arch"
-            exit 1
-          fi
-
-          portable_url="${RELEASE_DOWNLOAD_BASE_URL}/${{ needs.get-release.outputs.release_tag }}/$bin_file"
-          portable_sig=$(cat $bin_file.sig)
-
-          jq --arg url "$portable_url" \
-              --arg sig "$portable_sig" \
-              --arg key "$platform_key" \
-              '.platforms[$key] = {signature: $sig, url: $url}' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
-
-          echo "Uploading updated latest.json to GitHub release"
-          gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --repo "$RELEASE_REPO" --clobber
 
   check-r2-config:
     runs-on: ubuntu-latest
