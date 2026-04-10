@@ -417,8 +417,66 @@ jobs:
           gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --repo "$RELEASE_REPO" --clobber
 
   upload-to-r2:
-    needs: [get-release, build-tauri]
+    if: ${{ secrets.RELEASE_R2_ACCOUNT_ID != '' && secrets.RELEASE_R2_ACCESS_KEY_ID != '' && secrets.RELEASE_R2_SECRET_ACCESS_KEY != '' }}
+    needs: [get-release, build-tauri, refresh-latest-json]
+    permissions:
+      contents: read
+      actions: write
     uses: ./.github/workflows/upload-to-r2.yml
     with:
       tag: ${{ needs.get-release.outputs.release_tag }}
     secrets: inherit
+
+  refresh-latest-json:
+    needs: [get-release, build-tauri]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: refresh latest.json from release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag=${{ needs.get-release.outputs.release_tag }}
+          version=${{ needs.get-release.outputs.release_version }}
+          pub_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          create_latest_json() {
+            jq -n \
+              --arg version "$version" \
+              --arg notes "AIReadest release ${version}" \
+              --arg pub_date "$pub_date" \
+              '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {}}' > latest.json
+          }
+
+          if ! gh release download "$tag" --repo "$RELEASE_REPO" --pattern latest.json --dir . --clobber >/dev/null 2>&1; then
+            create_latest_json
+          fi
+
+          if ! jq -e '.platforms | type == "object"' latest.json >/dev/null 2>&1; then
+            create_latest_json
+          fi
+
+          jq --arg version "$version" --arg pub_date "$pub_date" \
+            '.version = $version | .pub_date = $pub_date | .notes = (if (.notes | type) == "string" then .notes else "" end) | (.platforms //= {})' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
+
+          update_platform() {
+            key="$1"
+            asset_name="$2"
+            sig_name="${asset_name}.sig"
+            url="${RELEASE_DOWNLOAD_BASE_URL}/${tag}/${asset_name}"
+
+            if gh release download "$tag" --repo "$RELEASE_REPO" --pattern "$sig_name" --dir . --clobber >/dev/null 2>&1; then
+              sig=$(cat "$sig_name")
+              jq --arg key "$key" --arg url "$url" --arg sig "$sig" \
+                '.platforms[$key] = {signature: $sig, url: $url}' latest.json > tmp.$$.json && mv tmp.$$.json latest.json
+            fi
+          }
+
+          update_platform "windows-x86_64-portable" "${ARTIFACT_PREFIX}_${version}_x64-portable.exe"
+          update_platform "windows-aarch64-portable" "${ARTIFACT_PREFIX}_${version}_arm64-portable.exe"
+          update_platform "android-universal" "${ARTIFACT_PREFIX}_${version}_universal.apk"
+          update_platform "android-arm64" "${ARTIFACT_PREFIX}_${version}_arm64.apk"
+
+          gh release upload "$tag" latest.json --repo "$RELEASE_REPO" --clobber
