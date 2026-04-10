@@ -416,9 +416,27 @@ jobs:
           echo "Uploading updated latest.json to GitHub release"
           gh release upload ${{ needs.get-release.outputs.release_tag }} latest.json --repo "$RELEASE_REPO" --clobber
 
+  check-r2-config:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          RELEASE_R2_ACCOUNT_ID: ${{ secrets.RELEASE_R2_ACCOUNT_ID }}
+          RELEASE_R2_ACCESS_KEY_ID: ${{ secrets.RELEASE_R2_ACCESS_KEY_ID }}
+          RELEASE_R2_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_R2_SECRET_ACCESS_KEY }}
+        shell: bash
+        run: |
+          if [ -n "$RELEASE_R2_ACCOUNT_ID" ] && [ -n "$RELEASE_R2_ACCESS_KEY_ID" ] && [ -n "$RELEASE_R2_SECRET_ACCESS_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
   upload-to-r2:
-    if: ${{ secrets.RELEASE_R2_ACCOUNT_ID != '' && secrets.RELEASE_R2_ACCESS_KEY_ID != '' && secrets.RELEASE_R2_SECRET_ACCESS_KEY != '' }}
-    needs: [get-release, build-tauri, refresh-latest-json]
+    if: ${{ needs['check-r2-config'].outputs.enabled == 'true' }}
+    needs: [get-release, build-tauri, refresh-latest-json, check-r2-config]
     permissions:
       contents: read
       actions: write
