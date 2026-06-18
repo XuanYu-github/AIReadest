@@ -17,7 +17,7 @@ jobs:
     env:
       RUSTFLAGS: '-C target-cpu=skylake'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
       - name: Install minimal stable with clippy and rustfmt
@@ -45,12 +45,12 @@ jobs:
           - platform: 'web'
           - platform: 'tauri'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
       - name: setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.14.0
 

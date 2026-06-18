@@ -30,7 +30,7 @@ jobs:
       release_version: ${{ steps.get-release-notes.outputs.release_version }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: setup node
         uses: actions/setup-node@v6
       - name: get version
@@ -39,7 +39,7 @@ jobs:
           echo "PACKAGE_VERSION=${package_version}" >> "$GITHUB_ENV"
       - name: get release
         id: get-release
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { data } = await github.rest.repos.getLatestRelease({
@@ -50,7 +50,7 @@ jobs:
             core.setOutput('release_tag', data.tag_name);
       - name: get release notes
         id: get-release-notes
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -73,7 +73,7 @@ jobs:
     steps:
       - name: update release
         id: update-release
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           release_id: ${{ needs.get-release.outputs.release_id }}
           release_tag: ${{ needs.get-release.outputs.release_tag }}
@@ -103,7 +103,7 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: create KOReader plugin zip
         env:
@@ -166,12 +166,12 @@ jobs:
     env:
       HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'true'
 
       - name: setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.14.0
 
@@ -190,7 +190,7 @@ jobs:
 
       - name: setup Android SDK (for Android build only)
         if: matrix.config.release == 'android'
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: install NDK (for Android build only)
         if: matrix.config.release == 'android'
